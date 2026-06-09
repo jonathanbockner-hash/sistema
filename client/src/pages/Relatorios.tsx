@@ -94,7 +94,8 @@ export default function Relatorios() {
     desagio: acc.desagio + l.calc.desagio,
     resultado: acc.resultado + l.calc.resultado,
     quebraKg: acc.quebraKg + l.calc.quebraKg,
-    avar: acc.avar + l.calc.kgCompra * (n(l.em.avar) / 100),
+    // Desconto real de avariado (já aplica tolerância via calcFinal)
+    avar: acc.avar + (l.desc ? l.calc.clsCompraDesc.avar.kgDesc : l.calc.clsOrig.avar.kgDesc),
   }), { pesoBal: 0, pesoOrigem: 0, pesoDescarga: 0, kgCompra: 0, valorCompra: 0, retencoes: 0, valorPagar: 0, kgVenda: 0, valorVenda: 0, frete: 0, comissao: 0, classCusto: 0, desagio: 0, resultado: 0, quebraKg: 0, avar: 0 }), [linhas]);
 
   // Dados do contrato selecionado para o cabeçalho
@@ -106,12 +107,14 @@ export default function Relatorios() {
   // Pagamentos: se contrato selecionado, filtra por ele; senão soma todos os contratos das linhas
   const contratoIdsNasLinhas = useMemo(() => {
     const ids: number[] = [];
-    linhas.forEach(l => { if (l.cc?.id && !ids.includes(l.cc.id)) ids.push(l.cc.id); });
+    // cc.id pode ser number ou string dependendo do banco
+    linhas.forEach(l => { const id = Number(l.cc?.id); if (id && !ids.includes(id)) ids.push(id); });
     return ids;
   }, [linhas]);
+  // ATENÇÃO: o campo no banco é 'compraId', não 'contratoCompraId'
   const pgtos = useMemo(() => {
-    if (contratoCompraId) return pagamentos.filter((p: any) => p.contratoCompraId === contratoCompraId);
-    return pagamentos.filter((p: any) => contratoIdsNasLinhas.includes(p.contratoCompraId));
+    if (contratoCompraId) return pagamentos.filter((p: any) => Number(p.compraId) === contratoCompraId);
+    return pagamentos.filter((p: any) => contratoIdsNasLinhas.includes(Number(p.compraId)));
   }, [pagamentos, contratoCompraId, contratoIdsNasLinhas]);
   const totalPago = pgtos.reduce((s: number, p: any) => s + n(p.valor), 0);
   const saldoPagar = totais.valorPagar - totalPago;
