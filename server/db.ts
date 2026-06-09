@@ -61,14 +61,22 @@ export async function getConfig() {
   return rows[0] ?? null;
 }
 
-export async function upsertConfig(data: { fundoMes: number; dmais: number; fethab: number; iagro: number; senar: number; funrural: number }) {
+export async function upsertConfig(data: { fundoMes: number; dmais: number; fethabRsTon: number; iagroRsTon: number; senarPerc: number; funruralPerc: number }) {
   const db = await getDb();
   if (!db) return;
   const existing = await getConfig();
+  const vals = {
+    fundoMes: String(data.fundoMes),
+    dmais: data.dmais,
+    fethabRsTon: String(data.fethabRsTon),
+    iagroRsTon: String(data.iagroRsTon),
+    senarPerc: String(data.senarPerc),
+    funruralPerc: String(data.funruralPerc),
+  };
   if (existing) {
-    await db.update(config).set({ fundoMes: String(data.fundoMes), dmais: data.dmais, fethab: String(data.fethab), iagro: String(data.iagro), senar: String(data.senar), funrural: String(data.funrural) }).where(eq(config.id, existing.id));
+    await db.update(config).set(vals).where(eq(config.id, existing.id));
   } else {
-    await db.insert(config).values({ fundoMes: String(data.fundoMes), dmais: data.dmais, fethab: String(data.fethab), iagro: String(data.iagro), senar: String(data.senar), funrural: String(data.funrural) });
+    await db.insert(config).values(vals);
   }
 }
 

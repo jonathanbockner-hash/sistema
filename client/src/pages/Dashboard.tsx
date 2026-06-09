@@ -23,8 +23,12 @@ export default function Dashboard() {
   const { data: descargas = [] } = trpc.embarques.list.useQuery({});
 
   const cfgN = {
-    fethab: n(cfg?.fethab), iagro: n(cfg?.iagro), senar: n(cfg?.senar),
-    funrural: n(cfg?.funrural), fundoMes: n(cfg?.fundoMes), dmais: n(cfg?.dmais ?? 2),
+    fethabRsTon: n(cfg?.fethabRsTon),
+    iagroRsTon: n(cfg?.iagroRsTon),
+    senarPerc: n(cfg?.senarPerc),
+    funruralPerc: n(cfg?.funruralPerc),
+    fundoMes: n(cfg?.fundoMes),
+    dmais: n(cfg?.dmais ?? 2),
   };
 
   const fornecedores = Array.from(new Set(compras.map(c => c.fornecedor).filter(Boolean)));

@@ -90,7 +90,7 @@ export default function Descargas() {
         diasDesagio: selectedOp.diasDesagio, comissaoValor: n(selectedOp.comissaoValor),
         comissaoTipo: selectedOp.comissaoTipo, custoClassTon: n(selectedOp.custoClassTon),
       },
-      cfg: { fethab: n(cfg.fethab), iagro: n(cfg.iagro), senar: n(cfg.senar), funrural: n(cfg.funrural), fundoMes: n(cfg.fundoMes), dmais: n(cfg.dmais) },
+      cfg: { fethabRsTon: n(cfg.fethabRsTon), iagroRsTon: n(cfg.iagroRsTon), senarPerc: n(cfg.senarPerc), funruralPerc: n(cfg.funruralPerc), fundoMes: n(cfg.fundoMes), dmais: n(cfg.dmais) },
     });
   }, [form.embarqueId, form.pesoDescarga, form.dcUmidade, form.dcImp, form.dcAvar, form.dcQueim, selectedEmbarque, selectedCompra, selectedVenda, selectedOp, cfg]);
 

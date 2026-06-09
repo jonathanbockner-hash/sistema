@@ -26,8 +26,12 @@ export default function Relatorios() {
   const embarquesSelecionados = embarqueId ? embarquesFiltrados.filter(e => e.id === embarqueId) : embarquesFiltrados;
 
   const cfgN = {
-    fethab: n(cfg?.fethab), iagro: n(cfg?.iagro), senar: n(cfg?.senar),
-    funrural: n(cfg?.funrural), fundoMes: n(cfg?.fundoMes), dmais: n(cfg?.dmais ?? 2),
+    fethabRsTon: n(cfg?.fethabRsTon),
+    iagroRsTon: n(cfg?.iagroRsTon),
+    senarPerc: n(cfg?.senarPerc),
+    funruralPerc: n(cfg?.funruralPerc),
+    fundoMes: n(cfg?.fundoMes),
+    dmais: n(cfg?.dmais ?? 2),
   };
 
   const linhas: LinhaRelatorio[] = useMemo(() => {

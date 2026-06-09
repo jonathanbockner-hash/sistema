@@ -43,12 +43,83 @@ export function classif(
   return { umid, imp, avar, queim, totalKg: umid.kgDesc + imp.kgDesc + avar.kgDesc + queim.kgDesc };
 }
 
+// ─── Configuração tributária ──────────────────────────────────────────────────
+/**
+ * Estrutura de configuração tributária usada nos cálculos.
+ *
+ * FETHAB (Mato Grosso — Lei 7.263/2000):
+ *   Calculado em R$ por tonelada com base na UPF-MT vigente.
+ *   Soja: FETHAB1 (10% UPF) + FETHAB2 (10% UPF) = 20% UPF/ton = R$ 48,70/ton
+ *   IAGRO Soja (código 8090): 1,15% UPF/ton = R$ 2,80/ton (pode ser configurado separado ou embutido)
+ *   Milho: FETHAB1 (6% UPF) — apenas interestaduais/exportação = R$ 14,61/ton
+ *   UPF-MT 1º sem/2026 = R$ 243,49 → Soja FETHAB: R$ 48,70/ton | Milho: R$ 14,61/ton
+ *
+ * IAGRO (Mato Grosso — código 8090):
+ *   1,15% da UPF-MT por tonelada de soja = R$ 2,80/ton (1º sem/2026).
+ *   Pode ser configurado separado no campo iagroRsTon ou embutido no fethabRsTon.
+ *   Padrão: iagroRsTon = 0 (embutido no FETHAB) para evitar dupla contagem.
+ *   Para MS o IAGRO é uma taxa sanitária diferente (não monetária, por hectare).
+ *
+ * SENAR (federal — Lei 8.315/1991):
+ *   0,20% sobre a receita bruta da comercialização (valor de compra bruto).
+ *   Retido pelo adquirente (trading) na nota fiscal.
+ *
+ * FUNRURAL (federal — Lei 8.212/1991 + LC 224/2025):
+ *   Produtor Pessoa Física: 1,63% (INSS 1,32% + RAT 0,11% + SENAR 0,20%) — vigente a partir de abr/2026
+ *   Produtor Pessoa Jurídica: 2,23% (Funrural+RAT 1,98% + SENAR 0,25%)
+ *   Base: receita bruta da comercialização (valor de compra bruto).
+ *   Retido pelo adquirente (trading) quando compra de PF.
+ *
+ * NOTA: O SENAR está embutido no FUNRURAL para PF (0,20% dos 1,63%).
+ *   Quando usar FUNRURAL PF, zerar SENAR separado para evitar dupla contagem.
+ *   Quando o produtor for PJ, usar FUNRURAL = 2,23% e SENAR = 0.
+ */
+export interface TribConfig {
+  /** FETHAB em R$ por tonelada (ex: 51.50 para soja MT com UPF 243,49) */
+  fethabRsTon: number;
+  /** IAGRO em R$ por tonelada (já incluso no fethabRsTon para soja MT; usar separado se necessário) */
+  iagroRsTon: number;
+  /** SENAR em % sobre o valor bruto de compra (ex: 0.20 para PF sem FUNRURAL) */
+  senarPerc: number;
+  /** FUNRURAL em % sobre o valor bruto de compra (ex: 1.63 para PF a partir abr/2026) */
+  funruralPerc: number;
+  /** Taxa de fundo ao mês para deságio (%) */
+  fundoMes: number;
+  /** Dias extras D+ */
+  dmais: number;
+}
+
+/**
+ * Calcula as retenções tributárias sobre uma operação de compra.
+ * @param valorBruto - Valor bruto da compra (R$)
+ * @param pesoKg - Peso líquido em kg (após descontos de classificação)
+ * @param cfg - Configuração tributária
+ */
+export function calcRetencoes(valorBruto: number, pesoKg: number, cfg: TribConfig) {
+  const toneladas = pesoKg / 1000;
+
+  // FETHAB: R$ por tonelada (inclui IAGRO para soja MT)
+  const retFethab = toneladas * n(cfg.fethabRsTon);
+
+  // IAGRO: R$ por tonelada (separado, se configurado)
+  const retIagro = toneladas * n(cfg.iagroRsTon);
+
+  // SENAR: % sobre valor bruto
+  const retSenar = valorBruto * n(cfg.senarPerc) / 100;
+
+  // FUNRURAL: % sobre valor bruto
+  const retFun = valorBruto * n(cfg.funruralPerc) / 100;
+
+  const retencoes = retFethab + retIagro + retSenar + retFun;
+  return { retFethab, retIagro, retSenar, retFun, retencoes };
+}
+
 // ─── Cálculo de embarque (origem) ─────────────────────────────────────────────
 export interface CalcEmbarqueInput {
   pesoOrigem: number;
   umidade: number; imp: number; avar: number; queim: number;
   cc: { precoSc: number; umidTol: number; umidFat: number; impTol: number; impFat: number; avarTol: number; avarFat: number; queimTol: number; queimFat: number };
-  cfg: { fethab: number; iagro: number; senar: number; funrural: number };
+  cfg: TribConfig;
 }
 
 export function calcEmbarque(input: CalcEmbarqueInput) {
@@ -57,11 +128,7 @@ export function calcEmbarque(input: CalcEmbarqueInput) {
   const kgCompra = Math.max(0, pesoOrigem - cls.totalKg);
   const scCompra = kgCompra / 60;
   const valorCompra = scCompra * n(cc.precoSc);
-  const retFethab = valorCompra * n(cfg.fethab) / 100;
-  const retIagro = valorCompra * n(cfg.iagro) / 100;
-  const retSenar = valorCompra * n(cfg.senar) / 100;
-  const retFun = valorCompra * n(cfg.funrural) / 100;
-  const retencoes = retFethab + retIagro + retSenar + retFun;
+  const { retFethab, retIagro, retSenar, retFun, retencoes } = calcRetencoes(valorCompra, kgCompra, cfg);
   return { cls, kgCompra, scCompra, valorCompra, retFethab, retIagro, retSenar, retFun, retencoes, valorPagar: valorCompra - retencoes };
 }
 
@@ -71,7 +138,7 @@ export interface CalcFinalInput extends CalcEmbarqueInput {
   dcUmidade: number; dcImp: number; dcAvar: number; dcQueim: number;
   cv: { precoSc: number; umidTol: number; umidFat: number; impTol: number; impFat: number; avarTol: number; avarFat: number; queimTol: number; queimFat: number };
   op: { freteTon: number; quebraTol: number; diasDesagio: number; comissaoValor: number; comissaoTipo: string; custoClassTon: number };
-  cfg: { fethab: number; iagro: number; senar: number; funrural: number; fundoMes: number; dmais: number };
+  cfg: TribConfig;
 }
 
 export function calcFinal(input: CalcFinalInput) {
@@ -94,11 +161,7 @@ export function calcFinal(input: CalcFinalInput) {
   const basePesoCompra = temDesc ? pesoDescarga : pesoOrigem;
   const kgCompra = Math.max(0, basePesoCompra - clsCompraDesc.totalKg);
   const valorCompra = (kgCompra / 60) * n(cc.precoSc);
-  const retFethab = valorCompra * n(cfg.fethab) / 100;
-  const retIagro = valorCompra * n(cfg.iagro) / 100;
-  const retSenar = valorCompra * n(cfg.senar) / 100;
-  const retFun = valorCompra * n(cfg.funrural) / 100;
-  const retencoes = retFethab + retIagro + retSenar + retFun;
+  const { retFethab, retIagro, retSenar, retFun, retencoes } = calcRetencoes(valorCompra, kgCompra, cfg);
   const valorPagar = valorCompra - retencoes;
 
   // Venda

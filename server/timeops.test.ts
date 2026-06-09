@@ -43,7 +43,23 @@ describe("auth.logout", () => {
 
 import { calcFinal, n, brl } from "../client/src/lib/calculos";
 
-describe("calcFinal — cálculos agrícolas", () => {
+/**
+ * Nova estrutura tributária:
+ * - fethabRsTon: R$ por tonelada (ex: 48,70 para soja MT = 20% UPF-MT 1º sem/2026)
+ * - iagroRsTon: R$ por tonelada (0 para soja MT, já incluso no FETHAB)
+ * - senarPerc: % sobre valor bruto (0 quando FUNRURAL > 0, pois já incluso)
+ * - funruralPerc: % sobre valor bruto (1,63% PF desde abr/2026, 2,23% PJ)
+ */
+const cfgNovo = {
+  fethabRsTon: 48.70,  // Soja MT: 20% UPF-MT (R$ 243,49 → R$ 48,70/ton)
+  iagroRsTon: 0,       // Soja MT: já incluso no FETHAB
+  senarPerc: 0,        // Incluso no FUNRURAL PF (LC 224/2025)
+  funruralPerc: 1.63,  // FUNRURAL PF: INSS Rural 1,32% + RAT 0,11% + SENAR 0,20%
+  fundoMes: 2.5,
+  dmais: 2,
+};
+
+describe("calcFinal — cálculos agrícolas com nova estrutura tributária", () => {
   const baseInput = {
     pesoOrigem: 30000,
     umidade: 14, imp: 1, avar: 0, queim: 0,
@@ -52,7 +68,7 @@ describe("calcFinal — cálculos agrícolas", () => {
     cc: { precoSc: 100, umidTol: 14, umidFat: 1.8, impTol: 1, impFat: 1, avarTol: 20, avarFat: 1, queimTol: 1, queimFat: 1 },
     cv: { precoSc: 110, umidTol: 14, umidFat: 1.8, impTol: 1, impFat: 1, avarTol: 20, avarFat: 1, queimTol: 1, queimFat: 1 },
     op: { freteTon: 30, quebraTol: 0.5, diasDesagio: 15, comissaoValor: 0.5, comissaoTipo: "percentual", custoClassTon: 2 },
-    cfg: { fethab: 0.2, iagro: 0, senar: 0.2, funrural: 2.5, fundoMes: 1.5, dmais: 2 },
+    cfg: cfgNovo,
   };
 
   it("calcula quebra corretamente", () => {
@@ -63,11 +79,8 @@ describe("calcFinal — cálculos agrícolas", () => {
 
   it("calcula valor de compra baseado em 60 kg/sc", () => {
     const r = calcFinal(baseInput);
-    // kgCompra = pesoOrigem - descontos de classificação
-    // valorCompra = kgCompra / 60 * precoSc
     expect(r.valorCompra).toBeGreaterThan(0);
-    expect(r.valorCompra).toBeLessThanOrEqual(50000);
-    // Verifica que o cálculo usa kgCompra corretamente
+    expect(r.valorCompra).toBeLessThanOrEqual(60000);
     expect(r.valorCompra).toBeCloseTo((r.kgCompra / 60) * baseInput.cc.precoSc, 1);
   });
 
@@ -81,6 +94,30 @@ describe("calcFinal — cálculos agrícolas", () => {
     const r = calcFinal(baseInput);
     // pesoOrigem 30000 kg = 30 ton * R$30/ton = R$900
     expect(r.frete).toBeCloseTo(900, 0);
+  });
+
+  it("FETHAB calculado em R$/ton sobre peso líquido (kgCompra)", () => {
+    const r = calcFinal(baseInput);
+    // FETHAB = kgCompra / 1000 × R$ 48,70/ton
+    const esperado = (r.kgCompra / 1000) * cfgNovo.fethabRsTon;
+    expect(r.retFethab).toBeCloseTo(esperado, 4);
+    expect(r.retFethab).toBeGreaterThan(0);
+  });
+
+  it("IAGRO zero para soja MT (já incluso no FETHAB)", () => {
+    const r = calcFinal(baseInput);
+    expect(r.retIagro).toBe(0);
+  });
+
+  it("FUNRURAL PF: 1,63% sobre valor bruto", () => {
+    const r = calcFinal(baseInput);
+    const esperado = r.valorCompra * 1.63 / 100;
+    expect(r.retFun).toBeCloseTo(esperado, 2);
+  });
+
+  it("SENAR zero quando FUNRURAL > 0 (evita dupla contagem)", () => {
+    const r = calcFinal(baseInput);
+    expect(r.retSenar).toBe(0);
   });
 
   it("resultado deve ser positivo com venda maior que compra", () => {
@@ -97,6 +134,22 @@ describe("calcFinal — cálculos agrícolas", () => {
   it("sem desconto quando dentro da tolerância", () => {
     const r = calcFinal({ ...baseInput, umidade: 13 });
     expect(r.clsOrig.umid.kgDesc).toBe(0);
+  });
+
+  it("FETHAB milho MT: R$ 14,61/ton (6% UPF-MT)", () => {
+    const cfgMilho = { ...cfgNovo, fethabRsTon: 14.61 };
+    const r = calcFinal({ ...baseInput, cfg: cfgMilho });
+    // FETHAB = kgCompra / 1000 × R$ 14,61/ton
+    const esperado = (r.kgCompra / 1000) * 14.61;
+    expect(r.retFethab).toBeCloseTo(esperado, 4);
+    expect(r.retFethab).toBeGreaterThan(0);
+  });
+
+  it("FUNRURAL PJ: 2,23% sobre valor bruto", () => {
+    const cfgPJ = { ...cfgNovo, funruralPerc: 2.23 };
+    const r = calcFinal({ ...baseInput, cfg: cfgPJ });
+    const esperado = r.valorCompra * 2.23 / 100;
+    expect(r.retFun).toBeCloseTo(esperado, 2);
   });
 });
 

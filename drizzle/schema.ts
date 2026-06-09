@@ -25,14 +25,23 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // ─── Configurações Gerais ────────────────────────────────────────────────────
+// FETHAB/IAGRO: R$ por tonelada (baseado na UPF-MT semestral)
+// SENAR/FUNRURAL: % sobre o valor bruto de compra
 export const config = mysqlTable("config", {
   id: int("id").autoincrement().primaryKey(),
   fundoMes: decimal("fundoMes", { precision: 10, scale: 4 }).default("2.5").notNull(),
   dmais: int("dmais").default(2).notNull(),
-  fethab: decimal("fethab", { precision: 10, scale: 4 }).default("2.0500").notNull(),
-  iagro: decimal("iagro", { precision: 10, scale: 4 }).default("0.1415").notNull(),
-  senar: decimal("senar", { precision: 10, scale: 4 }).default("0.1765").notNull(),
-  funrural: decimal("funrural", { precision: 10, scale: 4 }).default("0.0000").notNull(),
+  // FETHAB soja MT: 20% UPF/ton = R$ 48,70/ton (UPF 243,49 × 20% = R$ 48,70)
+  // FETHAB milho MT: 6% UPF/ton = R$ 14,61/ton (apenas interestaduais/exportação)
+  fethabRsTon: decimal("fethabRsTon", { precision: 10, scale: 4 }).default("48.7000").notNull(),
+  // IAGRO soja MT: 1,15% UPF/ton = R$ 2,80/ton (já incluso no FETHAB soja; usar 0 para evitar dupla contagem)
+  iagroRsTon: decimal("iagroRsTon", { precision: 10, scale: 4 }).default("0.0000").notNull(),
+  // SENAR: 0,20% sobre receita bruta (para PF sem FUNRURAL)
+  // Quando usar FUNRURAL PF (1,63%), zerar SENAR pois já está incluso
+  senarPerc: decimal("senarPerc", { precision: 10, scale: 4 }).default("0.0000").notNull(),
+  // FUNRURAL PF: 1,63% (INSS 1,32% + RAT 0,11% + SENAR 0,20%) — vigente abr/2026
+  // FUNRURAL PJ: 2,23% (Funrural+RAT 1,98% + SENAR 0,25%)
+  funruralPerc: decimal("funruralPerc", { precision: 10, scale: 4 }).default("1.6300").notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 

@@ -35,3 +35,13 @@
 
 ## Testes
 - [x] Testes vitest: auth.logout, calcFinal, utilitários n() e brl()
+
+## Melhorias v2
+- [x] Análise tributária: corrigir cálculo FETHAB (R$/ton via UPF-MT), IAGRO (R$/ton via UPF-MT), SENAR (% sobre valor bruto), FUNRURAL (% sobre valor bruto)
+- [x] Atualizar lib/calculos.ts com lógica tributária correta
+- [x] Atualizar Configurações: separar campos UPF-MT, alíquotas FETHAB/IAGRO por produto, SENAR e FUNRURAL por tipo de produtor
+- [x] Atualizar preview de embarque com tributos corretos
+- [x] Upload de PDF de NF de entrada e NF de saída no embarque
+- [x] Extração automática via LLM: data, placa, número NF, peso da NF de saída
+- [x] Preencher campos automaticamente após leitura do PDF
+- [x] Campos restantes (classificação) permanecem para preenchimento manual

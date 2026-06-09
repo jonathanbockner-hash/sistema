@@ -3,6 +3,8 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { invokeLLM } from "./_core/llm";
+import { storagePut, storageGetSignedUrl } from "./storage";
 import {
   getConfig, upsertConfig,
   listClassificadores, getClassificador, upsertClassificador, deleteClassificador,
@@ -38,7 +40,8 @@ export const appRouter = router({
     get: publicProcedure.query(() => getConfig()),
     save: publicProcedure.input(z.object({
       fundoMes: z.number(), dmais: z.number(),
-      fethab: z.number(), iagro: z.number(), senar: z.number(), funrural: z.number(),
+      fethabRsTon: z.number(), iagroRsTon: z.number(),
+      senarPerc: z.number(), funruralPerc: z.number(),
     })).mutation(({ input }) => upsertConfig(input)),
   }),
 
@@ -104,6 +107,109 @@ export const appRouter = router({
       obs: z.string().optional(),
     })).mutation(({ input }) => upsertOperacao(input)),
     delete: publicProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteOperacao(input.id)),
+  }),
+
+  // ─── Notas Fiscais (extração via LLM) ─────────────────────────────────────
+  nf: router({
+    /**
+     * Recebe o PDF da nota fiscal em base64, faz upload para o storage e
+     * extrai os dados estruturados via LLM (data, placa, número NF, peso).
+     */
+    extrair: publicProcedure.input(z.object({
+      pdfBase64: z.string(),
+      filename: z.string().default("nota_fiscal.pdf"),
+      tipo: z.enum(["entrada", "saida"]).default("saida"),
+    })).mutation(async ({ input }) => {
+      // 1. Upload do PDF para o storage
+      const pdfBuffer = Buffer.from(input.pdfBase64, "base64");
+      const { key, url } = await storagePut(
+        `nf-pdfs/${input.filename}`,
+        pdfBuffer,
+        "application/pdf"
+      );
+
+      // 2. URL assinada para o LLM acessar o arquivo
+      const signedUrl = await storageGetSignedUrl(key);
+
+      const instrucaoTipo = input.tipo === "saida"
+        ? "Esta é uma NOTA FISCAL DE SAÍDA (emitida por nós para o comprador). Extraia os campos solicitados."
+        : "Esta é uma NOTA FISCAL DE ENTRADA (emitida pelo fornecedor/produtor rural para nós). Extraia os campos solicitados.";
+
+      // 3. Extração estruturada via LLM
+      const response = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "text",
+                text: `Você é um especialista em leitura de notas fiscais brasileiras de transporte de grãos (soja, milho, etc.).
+Extraia os dados solicitados da nota fiscal em formato JSON estrito.
+Regras:
+- Para campos não encontrados, use null (nunca string vazia)
+- Datas no formato YYYY-MM-DD
+- Pesos em kg como número (ex: 28450.5)
+- Número da NF: apenas dígitos, sem formatação (ex: "123456")
+- Placa: formato ABC1234 ou ABC1D23 (Mercosul), sem traços ou espaços`,
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "file_url",
+                file_url: { url: signedUrl, mime_type: "application/pdf" },
+              },
+              {
+                type: "text",
+                text: `${instrucaoTipo}
+
+Extraia os seguintes campos:
+- dataEmissao: data de emissão da nota (formato YYYY-MM-DD)
+- numeroNF: número da nota fiscal (apenas dígitos)
+- placa: placa do veículo transportador (campo "Placa Veículo", "Veículo" ou similar)
+- pesoLiquido: peso líquido em kg (campo "Peso Líquido" ou "Peso Neto")
+- pesoBruto: peso bruto em kg (campo "Peso Bruto")
+- fornecedor: nome completo do emitente/remetente
+- produto: descrição do produto/mercadoria (ex: "Soja em grãos", "Milho em grãos")`,
+              },
+            ],
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "nota_fiscal",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                dataEmissao: { type: ["string", "null"], description: "Data de emissão no formato YYYY-MM-DD" },
+                numeroNF: { type: ["string", "null"], description: "Número da nota fiscal (apenas dígitos)" },
+                placa: { type: ["string", "null"], description: "Placa do veículo transportador" },
+                pesoLiquido: { type: ["number", "null"], description: "Peso líquido em kg" },
+                pesoBruto: { type: ["number", "null"], description: "Peso bruto em kg" },
+                fornecedor: { type: ["string", "null"], description: "Nome do emitente/remetente" },
+                produto: { type: ["string", "null"], description: "Descrição do produto/mercadoria" },
+              },
+              required: ["dataEmissao", "numeroNF", "placa", "pesoLiquido", "pesoBruto", "fornecedor", "produto"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      const content = response?.choices?.[0]?.message?.content;
+      let dados: Record<string, any> = {};
+      try {
+        dados = typeof content === "string" ? JSON.parse(content) : (content as any) ?? {};
+      } catch {
+        dados = {};
+      }
+
+      return { storageKey: key, storageUrl: url, dados };
+    }),
   }),
 
   // ─── Embarques ─────────────────────────────────────────────────────────────
