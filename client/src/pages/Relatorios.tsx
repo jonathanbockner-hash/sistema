@@ -95,8 +95,11 @@ export default function Relatorios() {
     resultado: acc.resultado + l.calc.resultado,
     quebraKg: acc.quebraKg + l.calc.quebraKg,
     // Desconto real de avariado (já aplica tolerância via calcFinal)
+    // Peso físico de avariado (informativo) — não é desconto
+    avarFisico: acc.avarFisico + (l.desc ? n(l.desc.dcAvar) / 100 * n(l.desc.pesoDescarga) : n(l.em.avar) / 100 * n(l.em.pesoOrigem)),
+    // Desconto real de avariado (só o excedente acima da tolerância)
     avar: acc.avar + (l.desc ? l.calc.clsCompraDesc.avar.kgDesc : l.calc.clsOrig.avar.kgDesc),
-  }), { pesoBal: 0, pesoOrigem: 0, pesoDescarga: 0, kgCompra: 0, valorCompra: 0, retencoes: 0, valorPagar: 0, kgVenda: 0, valorVenda: 0, frete: 0, comissao: 0, classCusto: 0, desagio: 0, resultado: 0, quebraKg: 0, avar: 0 }), [linhas]);
+  }), { pesoBal: 0, pesoOrigem: 0, pesoDescarga: 0, kgCompra: 0, valorCompra: 0, retencoes: 0, valorPagar: 0, kgVenda: 0, valorVenda: 0, frete: 0, comissao: 0, classCusto: 0, desagio: 0, resultado: 0, quebraKg: 0, avar: 0, avarFisico: 0 }), [linhas]);
 
   // Dados do contrato selecionado para o cabeçalho
   const ccSel = contratoCompraId ? compras.find(c => c.id === contratoCompraId) : (linhas[0]?.cc ?? null);
@@ -427,7 +430,12 @@ export default function Relatorios() {
                     </tr>
                     <tr>
                       <td>Total Avariado:</td>
-                      <td className="text-right">{fmt(totais.avar, 3)}</td>
+                      <td className="text-right">
+                        {totais.avar > 0
+                          ? <span className="text-red-700">{fmt(totais.avar, 3)}</span>
+                          : <span className="text-gray-400">0,000</span>
+                        }
+                      </td>
                       <td className="text-right">{brl(totais.comissao + totais.desagio)}</td>
                       <td className="pl-2 text-gray-600">Nota de Débito</td>
                     </tr>
