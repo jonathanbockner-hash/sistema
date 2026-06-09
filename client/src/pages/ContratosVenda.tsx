@@ -78,7 +78,7 @@ function calcTribVenda(params: {
 const defaultForm = {
   sigla: "", comprador: "", produto: "Soja", qualidade: "Padrão",
   volumeKg: 0, precoSc: 0,
-  destino: "interestadual", finalidade: "industria",
+  destino: "intraestadual", finalidade: "industria",
   umidTol: 14, umidFat: 1.8, impTol: 1, impFat: 1, avarTol: 40, avarFat: 1, queimTol: 1, queimFat: 1,
   obs: "",
 };
@@ -107,7 +107,7 @@ export default function ContratosVenda() {
     setForm({
       sigla: c.sigla, comprador: c.comprador, produto: c.produto, qualidade: c.qualidade,
       volumeKg: n(c.volumeKg), precoSc: n(c.precoSc),
-      destino: c.destinoVenda ?? "interestadual",
+      destino: c.destinoVenda ?? "intraestadual",
       finalidade: c.finalidadeVenda ?? "industria",
       umidTol: n(c.umidTol), umidFat: n(c.umidFat), impTol: n(c.impTol), impFat: n(c.impFat),
       avarTol: n(c.avarTol), avarFat: n(c.avarFat), queimTol: n(c.queimTol), queimFat: n(c.queimFat),

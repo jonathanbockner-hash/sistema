@@ -181,15 +181,17 @@ interface FieldProps {
   required?: boolean;
   children: ReactNode;
   className?: string;
+  error?: string;
 }
 
-export function Field({ label, required, children, className }: FieldProps) {
+export function Field({ label, required, children, className, error }: FieldProps) {
   return (
     <div className={cn("space-y-1.5", className)}>
       <label className="text-xs font-medium text-muted-foreground">
         {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       {children}
+      {error && <p className="text-xs text-red-400 mt-0.5">{error}</p>}
     </div>
   );
 }

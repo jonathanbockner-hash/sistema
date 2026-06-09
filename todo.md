@@ -66,3 +66,8 @@
 - [x] Pagamentos: upload de comprovante com leitura automática de valor, data, forma, número e chave PIX
 - [x] Relatório fiscal no modelo da imagem (tabela por NF, resumo financeiro, dados bancários, ajuste fiscal)
 - [x] Testes atualizados
+
+## Bugs v4
+- [x] Bug: Lançamento de Descarga sem validação obrigatória dos campos (peso, classificação)
+- [x] Bug: Leitura automática de PDF no Embarque não está funcionando
+- [x] Bug: ICMS sendo calculado mesmo com diferimento selecionado no Contrato de Compra

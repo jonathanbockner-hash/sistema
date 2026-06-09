@@ -169,3 +169,105 @@ describe("utilitários n() e brl()", () => {
     expect(result).toContain("56");
   });
 });
+
+// ─── Tributação por destino (Contrato de Venda) ───────────────────────────────
+
+/**
+ * A lógica de ICMS/PIS/COFINS está no painel informativo do Contrato de Venda.
+ * Testa a função que calcula os custos tributários da venda por destino e finalidade.
+ */
+
+function calcTribVenda(params: {
+  valorVenda: number;
+  destinoVenda: "intraestadual" | "interestadual";
+  finalidadeVenda: "industria" | "exportacao" | "mercado_interno" | "trading";
+  regimeTributario: "lucro_real" | "lucro_presumido" | "simples";
+}) {
+  const { valorVenda, destinoVenda, finalidadeVenda, regimeTributario } = params;
+
+  // ICMS: diferimento em segunda operação (intraestadual) = 0%
+  // Interestadual: alíquota varia por destino (12% geral, 7% para estados menos desenvolvidos)
+  let icmsPerc = 0;
+  if (destinoVenda === "interestadual") {
+    icmsPerc = 12; // alíquota padrão interestadual
+  }
+  // intraestadual = diferimento = ICMS = 0
+
+  // PIS/COFINS: isenção para exportação e indústria (imunidade constitucional)
+  // Para trading/mercado interno com Lucro Real: PIS 1,65% + COFINS 7,60% = 9,25%
+  let pisCofinsPerc = 0;
+  if (finalidadeVenda === "exportacao") {
+    pisCofinsPerc = 0; // imunidade constitucional
+  } else if (finalidadeVenda === "industria") {
+    pisCofinsPerc = 0; // suspensão/isenção para agroindústria
+  } else if (regimeTributario === "lucro_real") {
+    pisCofinsPerc = 9.25; // PIS 1,65% + COFINS 7,60%
+  } else if (regimeTributario === "lucro_presumido") {
+    pisCofinsPerc = 3.65; // PIS 0,65% + COFINS 3,00%
+  }
+
+  const custoIcms = valorVenda * icmsPerc / 100;
+  const custoPisCofins = valorVenda * pisCofinsPerc / 100;
+  const custoTotalTrib = custoIcms + custoPisCofins;
+
+  return { icmsPerc, pisCofinsPerc, custoIcms, custoPisCofins, custoTotalTrib };
+}
+
+describe("tributação por destino — Contrato de Venda", () => {
+  const valorVenda = 100_000;
+
+  it("intraestadual com diferimento → ICMS = 0", () => {
+    const r = calcTribVenda({
+      valorVenda,
+      destinoVenda: "intraestadual",
+      finalidadeVenda: "mercado_interno",
+      regimeTributario: "lucro_real",
+    });
+    expect(r.icmsPerc).toBe(0);
+    expect(r.custoIcms).toBe(0);
+  });
+
+  it("interestadual → ICMS = 12%", () => {
+    const r = calcTribVenda({
+      valorVenda,
+      destinoVenda: "interestadual",
+      finalidadeVenda: "mercado_interno",
+      regimeTributario: "lucro_real",
+    });
+    expect(r.icmsPerc).toBe(12);
+    expect(r.custoIcms).toBeCloseTo(12_000, 2);
+  });
+
+  it("exportação → PIS/COFINS = 0 (imunidade constitucional)", () => {
+    const r = calcTribVenda({
+      valorVenda,
+      destinoVenda: "interestadual",
+      finalidadeVenda: "exportacao",
+      regimeTributario: "lucro_real",
+    });
+    expect(r.pisCofinsPerc).toBe(0);
+    expect(r.custoPisCofins).toBe(0);
+  });
+
+  it("trading lucro real → PIS/COFINS = 9,25%", () => {
+    const r = calcTribVenda({
+      valorVenda,
+      destinoVenda: "intraestadual",
+      finalidadeVenda: "trading",
+      regimeTributario: "lucro_real",
+    });
+    expect(r.pisCofinsPerc).toBe(9.25);
+    expect(r.custoPisCofins).toBeCloseTo(9_250, 2);
+  });
+
+  it("indústria → PIS/COFINS = 0 (suspensão)", () => {
+    const r = calcTribVenda({
+      valorVenda,
+      destinoVenda: "intraestadual",
+      finalidadeVenda: "industria",
+      regimeTributario: "lucro_real",
+    });
+    expect(r.pisCofinsPerc).toBe(0);
+    expect(r.custoPisCofins).toBe(0);
+  });
+});

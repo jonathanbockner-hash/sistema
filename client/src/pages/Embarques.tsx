@@ -78,8 +78,10 @@ export default function Embarques() {
       toast.error("Arquivo muito grande. Máximo: 16 MB.");
       return;
     }
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Apenas arquivos PDF são aceitos.");
+    const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    const mimeType = file.type || "application/pdf";
+    if (!allowed.includes(mimeType) && !file.name.toLowerCase().match(/\.(pdf|jpg|jpeg|png|webp)$/)) {
+      toast.error("Formato não suportado. Use PDF, JPG, PNG ou WEBP.");
       return;
     }
 
@@ -92,10 +94,10 @@ export default function Embarques() {
       const bytes = new Uint8Array(arrayBuffer);
       let binary = "";
       for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-      const pdfBase64 = btoa(binary);
+      const fileBase64 = btoa(binary);
 
       const result = await extrairNf.mutateAsync({
-        pdfBase64,
+        pdfBase64: fileBase64,
         filename: file.name,
         tipo,
       });
@@ -380,7 +382,7 @@ function NfUploadCard({ label, sublabel, info, inputRef, onFile, onClear, highli
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf"
+        accept=".pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf"
         className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); }}
       />

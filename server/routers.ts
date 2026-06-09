@@ -43,27 +43,33 @@ async function extrairDocumentoViaLLM(
   filename: string,
   instrucao: string,
   campos: string,
-  jsonSchema: Record<string, any>
+  jsonSchema: Record<string, any>,
+  mimeType: string = "application/pdf"
 ) {
+  // Salvar no storage para referência/auditoria
   const pdfBuffer = Buffer.from(pdfBase64, "base64");
-  const { key, url } = await storagePut(`docs/${Date.now()}-${filename}`, pdfBuffer, "application/pdf");
-  const signedUrl = await storageGetSignedUrl(key);
+  const { key, url } = await storagePut(`docs/${Date.now()}-${filename}`, pdfBuffer, mimeType);
+
+  // Determinar se é imagem ou PDF para escolher o tipo de conteúdo correto
+  const isImage = mimeType.startsWith("image/");
+  const dataUri = `data:${mimeType};base64,${pdfBase64}`;
+
+  const contentItem = isImage
+    ? { type: "image_url" as const, image_url: { url: dataUri } }
+    : { type: "file_url" as const, file_url: { url: dataUri, mime_type: "application/pdf" as const } };
 
   const response = await invokeLLM({
     messages: [
       {
         role: "system",
-        content: [{
-          type: "text",
-          text: `Você é um especialista em leitura de documentos fiscais e financeiros brasileiros.
+        content: `Você é um especialista em leitura de documentos fiscais e financeiros brasileiros.
 Extraia os dados solicitados no formato JSON estrito.
 Regras: campos não encontrados → null; datas → YYYY-MM-DD; valores monetários → número sem símbolo; pesos → número em kg.`,
-        }],
       },
       {
         role: "user",
         content: [
-          { type: "file_url", file_url: { url: signedUrl, mime_type: "application/pdf" } },
+          contentItem,
           { type: "text", text: `${instrucao}\n\nExtraia os seguintes campos:\n${campos}` },
         ],
       },
@@ -233,6 +239,7 @@ export const appRouter = router({
     extrairTicket: publicProcedure.input(z.object({
       fileBase64: z.string(),
       filename: z.string().default("ticket_descarga.pdf"),
+      mimeType: z.string().default("application/pdf"),
     })).mutation(async ({ input }) => {
       return extrairDocumentoViaLLM(
         input.fileBase64, input.filename,
@@ -261,7 +268,8 @@ export const appRouter = router({
           },
           required: ["dataDescarga", "numeroTicket", "placa", "pesoDescarga", "nfeSaida", "umidade", "impureza", "avariado", "queimado"],
           additionalProperties: false,
-        }
+        },
+        input.mimeType
       );
     }),
 
@@ -269,6 +277,7 @@ export const appRouter = router({
     extrairComprovante: publicProcedure.input(z.object({
       fileBase64: z.string(),
       filename: z.string().default("comprovante.pdf"),
+      mimeType: z.string().default("application/pdf"),
     })).mutation(async ({ input }) => {
       return extrairDocumentoViaLLM(
         input.fileBase64, input.filename,
@@ -293,7 +302,8 @@ export const appRouter = router({
           },
           required: ["dataPagamento", "valor", "formaPagamento", "numeroBoleto", "chavePix", "banco", "observacao"],
           additionalProperties: false,
-        }
+        },
+        input.mimeType
       );
     }),
   }),
