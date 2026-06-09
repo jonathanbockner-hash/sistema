@@ -71,3 +71,6 @@
 - [x] Bug: Lançamento de Descarga sem validação obrigatória dos campos (peso, classificação)
 - [x] Bug: Leitura automática de PDF no Embarque não está funcionando
 - [x] Bug: ICMS sendo calculado mesmo com diferimento selecionado no Contrato de Compra
+
+## Bugs v5
+- [x] Bug: Lançamento de Descarga — formulário inline não funciona corretamente, reescrever com modal/drawer
