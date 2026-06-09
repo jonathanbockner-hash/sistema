@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { SectionHeader, FormSection, Field, EmptyState, inputCls, selectCls, textareaCls } from "@/components/TimeOpsComponents";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, X } from "lucide-react";
+import { Pencil, Trash2, Plus, X, Wand2 } from "lucide-react";
 import { n } from "@/lib/calculos";
 
 const defaultForm = {
@@ -11,6 +11,7 @@ const defaultForm = {
   freteTon: 0, quebraTol: 0.25, diasDesagio: 15,
   comissaoValor: 0, comissaoTipo: "sc" as const,
   classificadorId: null as number | null, custoClassTon: 0.017,
+  corretorId: null as number | null,
   obs: "",
 };
 
@@ -23,11 +24,36 @@ export default function Operacoes() {
   const { data: compras = [] } = trpc.compras.list.useQuery();
   const { data: vendas = [] } = trpc.vendas.list.useQuery();
   const { data: classificadores = [] } = trpc.classificadores.list.useQuery();
+  const { data: corretores = [] } = trpc.corretores.list.useQuery();
 
   const save = trpc.operacoes.save.useMutation({ onSuccess: () => { refetch(); setShowForm(false); setForm({ ...defaultForm }); setEditId(null); toast.success("Operação salva!"); } });
   const del = trpc.operacoes.delete.useMutation({ onSuccess: () => { refetch(); toast.success("Operação removida."); } });
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+
+  // Gerar sigla automática quando compra ou venda mudam
+  useEffect(() => {
+    if (!form.compraId || !form.vendaId || editId) return;
+    const compra = compras.find(c => c.id === form.compraId);
+    const venda = vendas.find(v => v.id === form.vendaId);
+    if (!compra || !venda) return;
+    // Formato: OP-[SIGLA_COMPRA]-[SIGLA_VENDA]-[SEQ]
+    const seq = (operacoes.length + 1).toString().padStart(3, "0");
+    const siglaCompra = compra.sigla.replace(/\s+/g, "").toUpperCase().slice(0, 6);
+    const siglaVenda = venda.sigla.replace(/\s+/g, "").toUpperCase().slice(0, 6);
+    const siglaAuto = `OP-${siglaCompra}-${siglaVenda}-${seq}`;
+    set("sigla", siglaAuto);
+  }, [form.compraId, form.vendaId]);
+
+  function gerarSigla() {
+    const compra = compras.find(c => c.id === form.compraId);
+    const venda = vendas.find(v => v.id === form.vendaId);
+    if (!compra || !venda) { toast.error("Selecione compra e venda primeiro."); return; }
+    const seq = (operacoes.length + 1).toString().padStart(3, "0");
+    const siglaCompra = compra.sigla.replace(/\s+/g, "").toUpperCase().slice(0, 6);
+    const siglaVenda = venda.sigla.replace(/\s+/g, "").toUpperCase().slice(0, 6);
+    set("sigla", `OP-${siglaCompra}-${siglaVenda}-${seq}`);
+  }
 
   function handleEdit(op: any) {
     setForm({
@@ -35,6 +61,7 @@ export default function Operacoes() {
       freteTon: n(op.freteTon), quebraTol: n(op.quebraTol), diasDesagio: op.diasDesagio,
       comissaoValor: n(op.comissaoValor), comissaoTipo: op.comissaoTipo,
       classificadorId: op.classificadorId ?? null, custoClassTon: n(op.custoClassTon),
+      corretorId: op.corretorId ?? null,
       obs: op.obs ?? "",
     });
     setEditId(op.id);
@@ -50,6 +77,7 @@ export default function Operacoes() {
   const getCompra = (id: number) => compras.find(c => c.id === id);
   const getVenda = (id: number) => vendas.find(v => v.id === id);
   const getCl = (id: number | null) => id ? classificadores.find(c => c.id === id) : null;
+  const getCor = (id: number | null) => id ? corretores.find(c => c.id === id) : null;
 
   const comissaoTipos = [
     { value: "sc", label: "R$/saca" },
@@ -78,9 +106,6 @@ export default function Operacoes() {
           </div>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Nome / sigla da operação" required>
-                <input className={inputCls} placeholder="OP-239-GAB-QUE" value={form.sigla} onChange={e => set("sigla", e.target.value)} required />
-              </Field>
               <Field label="Contrato de compra" required>
                 <select className={selectCls} value={form.compraId || ""} onChange={e => set("compraId", Number(e.target.value))} required>
                   <option value="">Selecione...</option>
@@ -92,6 +117,16 @@ export default function Operacoes() {
                   <option value="">Selecione...</option>
                   {vendas.map(v => <option key={v.id} value={v.id}>{v.sigla} — {v.comprador}</option>)}
                 </select>
+              </Field>
+              <Field label="Nome / sigla da operação" required>
+                <div className="flex gap-1.5">
+                  <input className={`${inputCls} flex-1`} placeholder="Gerado automaticamente" value={form.sigla} onChange={e => set("sigla", e.target.value)} required />
+                  <button type="button" onClick={gerarSigla}
+                    className="flex items-center gap-1 px-2.5 rounded-lg border border-border bg-muted/30 text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors text-xs"
+                    title="Gerar sigla automaticamente">
+                    <Wand2 size={12} />
+                  </button>
+                </div>
               </Field>
             </div>
 
@@ -114,15 +149,61 @@ export default function Operacoes() {
                     {comissaoTipos.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </Field>
-                <Field label="Classificador">
-                  <select className={selectCls} value={form.classificadorId ?? ""} onChange={e => set("classificadorId", e.target.value ? Number(e.target.value) : null)}>
-                    <option value="">Não definido</option>
-                    {classificadores.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </Field>
-                <Field label="Custo classificador R$/ton">
-                  <input className={inputCls} type="number" step="0.0001" value={form.custoClassTon} onChange={e => set("custoClassTon", Number(e.target.value))} />
-                </Field>
+              </div>
+            </FormSection>
+
+            <FormSection title="Classificador e Corretor">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Classificador */}
+                <div className="rounded-lg border border-border/50 bg-muted/10 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-foreground">Classificador</p>
+                  <Field label="Selecionar classificador">
+                    <select className={selectCls} value={form.classificadorId ?? ""} onChange={e => {
+                      const id = e.target.value ? Number(e.target.value) : null;
+                      set("classificadorId", id);
+                      if (id) {
+                        const cl = classificadores.find(c => c.id === id);
+                        if (cl) set("custoClassTon", n((cl as any).custoTon ?? 0.017));
+                      }
+                    }}>
+                      <option value="">Não definido</option>
+                      {classificadores.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  </Field>
+                  {form.classificadorId && (() => {
+                    const cl = getCl(form.classificadorId);
+                    return cl ? (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        <p>CPF: <span className="text-foreground">{cl.cpf}</span></p>
+                        <p>PIX: <span className="text-foreground font-mono">{cl.pix}</span></p>
+                      </div>
+                    ) : null;
+                  })()}
+                  <Field label="Custo classificador R$/ton">
+                    <input className={inputCls} type="number" step="0.0001" value={form.custoClassTon} onChange={e => set("custoClassTon", Number(e.target.value))} />
+                  </Field>
+                </div>
+
+                {/* Corretor */}
+                <div className="rounded-lg border border-border/50 bg-muted/10 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-foreground">Corretor</p>
+                  <Field label="Selecionar corretor">
+                    <select className={selectCls} value={form.corretorId ?? ""} onChange={e => set("corretorId", e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">Não definido</option>
+                      {corretores.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  </Field>
+                  {form.corretorId && (() => {
+                    const cor = getCor(form.corretorId);
+                    return cor ? (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        <p>CPF/CNPJ: <span className="text-foreground">{cor.cpfCnpj}</span></p>
+                        <p>PIX: <span className="text-foreground font-mono">{cor.pix}</span></p>
+                        {cor.comissaoValor && <p>Comissão padrão: <span className="text-foreground">{n(cor.comissaoValor)} ({cor.comissaoTipo})</span></p>}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
               </div>
             </FormSection>
 
@@ -153,7 +234,7 @@ export default function Operacoes() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border/50 bg-muted/30">
-                  {["Sigla","Compra","Venda","Frete R$/t","Quebra tol.","Dias deságio","Comissão","Classificador","Ações"].map(h => (
+                  {["Sigla","Compra","Venda","Frete R$/t","Quebra tol.","Dias deságio","Comissão","Classificador","Corretor","Ações"].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -169,6 +250,7 @@ export default function Operacoes() {
                     <td className="px-4 py-3 text-muted-foreground">{op.diasDesagio} dias</td>
                     <td className="px-4 py-3 text-muted-foreground">{n(op.comissaoValor)} ({op.comissaoTipo})</td>
                     <td className="px-4 py-3 text-muted-foreground">{getCl(op.classificadorId)?.nome ?? "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{getCor(op.corretorId ?? null)?.nome ?? "—"}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => handleEdit(op)} className="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"><Pencil size={12} /></button>

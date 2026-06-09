@@ -45,3 +45,24 @@
 - [x] Extração automática via LLM: data, placa, número NF, peso da NF de saída
 - [x] Preencher campos automaticamente após leitura do PDF
 - [x] Campos restantes (classificação) permanecem para preenchimento manual
+
+## Melhorias v3
+- [x] Schema: tabela corretores (nome, cpf, pix, custo por sc/ton/fixo)
+- [x] Schema: campo retencaoTributos (boolean) em contratos_compra
+- [x] Schema: campos tributação de venda (destinoVenda, finalidadeVenda, regimeTributario, icmsIsento, pisCofinsIsento) em contratos_venda
+- [x] Schema: campo corretorId em operacoes
+- [x] Schema: campo ticketUrl e ticketDados em descargas
+- [x] Schema: campo comprovanteUrl e comprovanteDados em pagamentos
+- [x] Migration SQL aplicada
+- [x] Router tRPC: corretores (CRUD)
+- [x] Router tRPC: nf.extrairTicket (leitura de ticket de descarga via LLM)
+- [x] Router tRPC: nf.extrairComprovante (leitura de comprovante de pagamento via LLM)
+- [x] Dashboard: KPIs expandidos (lucro bruto, custo operacional, comissão, lucro líquido)
+- [x] Contrato de Compra: campo "Reter tributos?" com toggle e seleção individual (FUNRURAL, FETHAB, IAGRO, SENAR)
+- [x] Contrato de Venda: campos de tributação por destino/finalidade com cálculo automático de PIS/COFINS e ICMS
+- [x] Operações: geração automática de sigla e seleção de corretor
+- [x] Módulo Corretor: página de cadastro igual ao Classificador
+- [x] Lançamento Descarga: filtro por operação mostrando embarques em aberto, upload de ticket PDF/foto com leitura automática
+- [x] Pagamentos: upload de comprovante com leitura automática de valor, data, forma, número e chave PIX
+- [x] Relatório fiscal no modelo da imagem (tabela por NF, resumo financeiro, dados bancários, ajuste fiscal)
+- [x] Testes atualizados

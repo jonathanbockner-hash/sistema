@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { KpiCard, SectionHeader, StatusBadge, EmptyState } from "@/components/TimeOpsComponents";
 import { brl, kg, n, calcFinal } from "@/lib/calculos";
 import { Button } from "@/components/ui/button";
-import { Download, RefreshCw } from "lucide-react";
+import { Download, RefreshCw, TrendingUp, TrendingDown, DollarSign, Truck } from "lucide-react";
 
 export default function Dashboard() {
   const [dataIni, setDataIni] = useState("");
@@ -18,9 +18,7 @@ export default function Dashboard() {
   const { data: vendas = [] } = trpc.vendas.list.useQuery();
   const { data: cfg } = trpc.config.get.useQuery();
   const { data: pagamentos = [] } = trpc.pagamentos.list.useQuery({});
-
-  // Enrich embarques with descarga data
-  const { data: descargas = [] } = trpc.embarques.list.useQuery({});
+  const { data: descargas = [] } = trpc.descargas.list.useQuery();
 
   const cfgN = {
     fethabRsTon: n(cfg?.fethabRsTon),
@@ -39,9 +37,10 @@ export default function Dashboard() {
       const op = operacoes.find(o => o.id === em.operacaoId);
       const cc = compras.find(c => c.id === op?.compraId);
       const cv = vendas.find(v => v.id === op?.vendaId);
-      return { ...em, op, cc, cv };
+      const desc = descargas.find((d: any) => d.embarqueId === em.id);
+      return { ...em, op, cc, cv, desc };
     });
-  }, [embarquesRaw, operacoes, compras, vendas]);
+  }, [embarquesRaw, operacoes, compras, vendas, descargas]);
 
   const filtered = useMemo(() => {
     return embarquesEnriquecidos.filter(em => {
@@ -54,24 +53,73 @@ export default function Dashboard() {
     });
   }, [embarquesEnriquecidos, filtroFornecedor, filtroComprador, filtroOperacao, dataIni, dataFim]);
 
-  // KPIs
-  const totalPesoOrigem = filtered.reduce((a, e) => a + n(e.pesoOrigem), 0);
-  const totalValorCompra = filtered.reduce((a, e) => {
-    if (!e.cc || !e.op) return a;
-    const calc = calcFinal({
-      pesoOrigem: n(e.pesoOrigem), umidade: n(e.umidade), imp: n(e.imp), avar: n(e.avar), queim: n(e.queim),
-      pesoDescarga: 0, dcUmidade: 0, dcImp: 0, dcAvar: 0, dcQueim: 0,
-      cc: { precoSc: n(e.cc.precoSc), umidTol: n(e.cc.umidTol), umidFat: n(e.cc.umidFat), impTol: n(e.cc.impTol), impFat: n(e.cc.impFat), avarTol: n(e.cc.avarTol), avarFat: n(e.cc.avarFat), queimTol: n(e.cc.queimTol), queimFat: n(e.cc.queimFat) },
-      cv: { precoSc: 0, umidTol: 14, umidFat: 1.8, impTol: 1, impFat: 1, avarTol: 40, avarFat: 1, queimTol: 1, queimFat: 1 },
-      op: { freteTon: n(e.op.freteTon), quebraTol: n(e.op.quebraTol), diasDesagio: n(e.op.diasDesagio), comissaoValor: n(e.op.comissaoValor), comissaoTipo: e.op.comissaoTipo, custoClassTon: n(e.op.custoClassTon) },
-      cfg: cfgN,
-    });
-    return a + calc.valorCompra;
-  }, 0);
+  // KPIs calculados
+  const kpis = useMemo(() => {
+    let totalPesoOrigem = 0;
+    let totalValorCompra = 0;
+    let totalValorVenda = 0;
+    let totalFrete = 0;
+    let totalComissao = 0;
+    let totalClassCusto = 0;
+    let totalDesagio = 0;
+    let totalRetencoes = 0;
+    let totalPrejuQuebra = 0;
+    let emAberto = 0;
+    let finalizadas = 0;
 
-  const totalPago = pagamentos.reduce((a, p) => a + n(p.valor), 0);
-  const saldoPendente = Math.max(0, totalValorCompra - totalPago);
-  const emAberto = filtered.filter(e => e.status !== "Finalizada").length;
+    for (const em of filtered) {
+      if (!em.cc || !em.op || !em.cv) continue;
+      totalPesoOrigem += n(em.pesoOrigem);
+      if (em.status !== "Finalizada") { emAberto++; continue; }
+      finalizadas++;
+
+      const desc = em.desc as any;
+      const calc = calcFinal({
+        pesoOrigem: n(em.pesoOrigem),
+        umidade: n(em.umidade), imp: n(em.imp), avar: n(em.avar), queim: n(em.queim),
+        pesoDescarga: desc ? n(desc.pesoDescarga) : 0,
+        dcUmidade: desc ? n(desc.dcUmidade) : 0,
+        dcImp: desc ? n(desc.dcImp) : 0,
+        dcAvar: desc ? n(desc.dcAvar) : 0,
+        dcQueim: desc ? n(desc.dcQueim) : 1,
+        cc: { precoSc: n(em.cc.precoSc), umidTol: n(em.cc.umidTol), umidFat: n(em.cc.umidFat), impTol: n(em.cc.impTol), impFat: n(em.cc.impFat), avarTol: n(em.cc.avarTol), avarFat: n(em.cc.avarFat), queimTol: n(em.cc.queimTol), queimFat: n(em.cc.queimFat) },
+        cv: { precoSc: n(em.cv.precoSc), umidTol: n(em.cv.umidTol), umidFat: n(em.cv.umidFat), impTol: n(em.cv.impTol), impFat: n(em.cv.impFat), avarTol: n(em.cv.avarTol), avarFat: n(em.cv.avarFat), queimTol: n(em.cv.queimTol), queimFat: n(em.cv.queimFat) },
+        op: { freteTon: n(em.op.freteTon), quebraTol: n(em.op.quebraTol), diasDesagio: n(em.op.diasDesagio), comissaoValor: n(em.op.comissaoValor), comissaoTipo: em.op.comissaoTipo, custoClassTon: n(em.op.custoClassTon) },
+        cfg: cfgN,
+      });
+
+      totalValorCompra += calc.valorCompra;
+      totalValorVenda += calc.valorVenda;
+      totalFrete += calc.frete;
+      totalComissao += calc.comissao;
+      totalClassCusto += calc.classCusto;
+      totalDesagio += calc.desagio;
+      totalRetencoes += calc.retencoes;
+      totalPrejuQuebra += calc.prejuQuebra;
+    }
+
+    const lucroBruto = totalValorVenda - totalValorCompra;
+    const custoOperacional = totalFrete + totalClassCusto + totalDesagio + totalPrejuQuebra;
+    const lucroLiquido = lucroBruto - custoOperacional - totalComissao;
+    const totalPago = pagamentos.reduce((a: number, p: any) => a + n(p.valor), 0);
+    const saldoPendente = Math.max(0, totalValorCompra - totalPago);
+
+    return {
+      totalPesoOrigem,
+      totalValorCompra,
+      totalValorVenda,
+      lucroBruto,
+      custoOperacional,
+      totalComissao,
+      lucroLiquido,
+      totalRetencoes,
+      totalFrete,
+      totalPago,
+      saldoPendente,
+      emAberto,
+      finalizadas,
+    };
+  }, [filtered, pagamentos, cfgN]);
 
   function exportCSV() {
     const rows = [
@@ -90,6 +138,8 @@ export default function Dashboard() {
     a.click();
   }
 
+  const margemPerc = kpis.totalValorVenda > 0 ? (kpis.lucroLiquido / kpis.totalValorVenda * 100) : 0;
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -107,13 +157,64 @@ export default function Dashboard() {
         }
       />
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KpiCard label="Volume embarcado" value={kg(totalPesoOrigem)} trend="neutral" />
-        <KpiCard label="Valor de compra" value={brl(totalValorCompra)} trend="neutral" />
-        <KpiCard label="Total pago" value={brl(totalPago)} trend="up" />
-        <KpiCard label="Saldo a pagar" value={brl(saldoPendente)} trend={saldoPendente > 0 ? "down" : "up"} />
-        <KpiCard label="Cargas em aberto" value={String(emAberto)} trend={emAberto > 0 ? "neutral" : "up"} />
+      {/* KPIs — Linha 1: Volumes e Receitas */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-0.5">Volumes &amp; Receitas</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <KpiCard label="Volume embarcado" value={kg(kpis.totalPesoOrigem)} trend="neutral" />
+          <KpiCard label="Receita de venda" value={brl(kpis.totalValorVenda)} trend="up" />
+          <KpiCard label="Custo de compra" value={brl(kpis.totalValorCompra)} trend="neutral" />
+          <KpiCard label="Retenções tributárias" value={brl(kpis.totalRetencoes)} trend="down" />
+        </div>
+      </div>
+
+      {/* KPIs — Linha 2: Resultado */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-0.5">Resultado Financeiro</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-border bg-card p-4 space-y-1">
+            <p className="text-xs text-muted-foreground">Lucro Bruto</p>
+            <p className={`text-xl font-bold font-mono ${kpis.lucroBruto >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {brl(kpis.lucroBruto)}
+            </p>
+            <p className="text-xs text-muted-foreground">Venda − Compra</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 space-y-1">
+            <p className="text-xs text-muted-foreground">Custo Operacional</p>
+            <p className="text-xl font-bold font-mono text-amber-400">{brl(kpis.custoOperacional)}</p>
+            <p className="text-xs text-muted-foreground">Frete + Classif. + Deságio + Quebra</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 space-y-1">
+            <p className="text-xs text-muted-foreground">Comissão</p>
+            <p className="text-xl font-bold font-mono text-amber-400">{brl(kpis.totalComissao)}</p>
+            <p className="text-xs text-muted-foreground">Corretores e intermediários</p>
+          </div>
+          <div className={`rounded-xl border-2 p-4 space-y-1 ${kpis.lucroLiquido >= 0 ? "border-emerald-500/40 bg-emerald-500/5" : "border-red-500/40 bg-red-500/5"}`}>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Lucro Líquido</p>
+              {kpis.lucroLiquido >= 0
+                ? <TrendingUp size={14} className="text-emerald-400" />
+                : <TrendingDown size={14} className="text-red-400" />}
+            </div>
+            <p className={`text-xl font-bold font-mono ${kpis.lucroLiquido >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {brl(kpis.lucroLiquido)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Margem: {margemPerc.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs — Linha 3: Pagamentos */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-0.5">Pagamentos &amp; Cargas</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <KpiCard label="Total pago" value={brl(kpis.totalPago)} trend="up" />
+          <KpiCard label="Saldo a pagar" value={brl(kpis.saldoPendente)} trend={kpis.saldoPendente > 0 ? "down" : "up"} />
+          <KpiCard label="Cargas em trânsito" value={String(kpis.emAberto)} trend={kpis.emAberto > 0 ? "neutral" : "up"} />
+          <KpiCard label="Cargas finalizadas" value={String(kpis.finalizadas)} trend="up" />
+        </div>
       </div>
 
       {/* Filtros */}
@@ -181,24 +282,45 @@ export default function Dashboard() {
                   <th className="text-left px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider">NF Entrada</th>
                   <th className="text-left px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider">Data</th>
                   <th className="text-right px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider">Peso Orig.</th>
+                  <th className="text-right px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider">Resultado</th>
                   <th className="text-left px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((em, i) => (
-                  <tr key={em.id} className={`border-b border-border/30 hover:bg-accent/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                    <td className="px-4 py-3 font-medium text-foreground">{em.op?.sigla ?? "-"}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{em.cc?.fornecedor ?? "-"}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{em.cv?.comprador ?? "-"}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{em.placa ?? "—"}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{em.nfeEntrada ?? "—"}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {em.dataEmbarque ? new Date(em.dataEmbarque).toLocaleDateString("pt-BR") : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-foreground">{n(em.pesoOrigem).toLocaleString("pt-BR")} kg</td>
-                    <td className="px-4 py-3"><StatusBadge status={em.status} /></td>
-                  </tr>
-                ))}
+                {filtered.map((em, i) => {
+                  let resultado: number | null = null;
+                  if (em.status === "Finalizada" && em.cc && em.cv && em.op && em.desc) {
+                    const d = em.desc as any;
+                    const calc = calcFinal({
+                      pesoOrigem: n(em.pesoOrigem), umidade: n(em.umidade), imp: n(em.imp), avar: n(em.avar), queim: n(em.queim),
+                      pesoDescarga: n(d.pesoDescarga), dcUmidade: n(d.dcUmidade), dcImp: n(d.dcImp), dcAvar: n(d.dcAvar), dcQueim: n(d.dcQueim),
+                      cc: { precoSc: n(em.cc.precoSc), umidTol: n(em.cc.umidTol), umidFat: n(em.cc.umidFat), impTol: n(em.cc.impTol), impFat: n(em.cc.impFat), avarTol: n(em.cc.avarTol), avarFat: n(em.cc.avarFat), queimTol: n(em.cc.queimTol), queimFat: n(em.cc.queimFat) },
+                      cv: { precoSc: n(em.cv.precoSc), umidTol: n(em.cv.umidTol), umidFat: n(em.cv.umidFat), impTol: n(em.cv.impTol), impFat: n(em.cv.impFat), avarTol: n(em.cv.avarTol), avarFat: n(em.cv.avarFat), queimTol: n(em.cv.queimTol), queimFat: n(em.cv.queimFat) },
+                      op: { freteTon: n(em.op.freteTon), quebraTol: n(em.op.quebraTol), diasDesagio: n(em.op.diasDesagio), comissaoValor: n(em.op.comissaoValor), comissaoTipo: em.op.comissaoTipo, custoClassTon: n(em.op.custoClassTon) },
+                      cfg: cfgN,
+                    });
+                    resultado = calc.resultado;
+                  }
+                  return (
+                    <tr key={em.id} className={`border-b border-border/30 hover:bg-accent/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
+                      <td className="px-4 py-3 font-medium text-foreground">{em.op?.sigla ?? "-"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{em.cc?.fornecedor ?? "-"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{em.cv?.comprador ?? "-"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{em.placa ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{em.nfeEntrada ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {em.dataEmbarque ? new Date(em.dataEmbarque).toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-foreground">{n(em.pesoOrigem).toLocaleString("pt-BR")} kg</td>
+                      <td className="px-4 py-3 text-right font-mono">
+                        {resultado !== null
+                          ? <span className={resultado >= 0 ? "text-emerald-400" : "text-red-400"}>{brl(resultado)}</span>
+                          : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge status={em.status} /></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

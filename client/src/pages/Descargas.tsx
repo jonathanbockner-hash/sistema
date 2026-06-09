@@ -1,20 +1,23 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { SectionHeader, FormSection, Field, EmptyState, PreviewRow, inputCls, selectCls, textareaCls } from "@/components/TimeOpsComponents";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { X, Calculator } from "lucide-react";
+import { X, Calculator, Upload, Loader2, Truck } from "lucide-react";
 import { n, brl, calcFinal } from "@/lib/calculos";
 
 const defaultForm = {
   embarqueId: 0, dataDescarga: "", pesoDescarga: 0,
-  placa: "", nfeSaida: "",
-  dcUmidade: 0, dcImp: 0, dcAvar: 0, dcQueim: 0, obs: "",
+  placa: "", nfeSaida: "", ticketNumero: "", ticketUrl: "",
+  dcUmidade: 0, dcImp: 0, dcAvar: 0, dcQueim: 1, obs: "",
 };
 
 export default function Descargas() {
   const [form, setForm] = useState<any>({ ...defaultForm });
   const [showForm, setShowForm] = useState(false);
+  const [filtroOp, setFiltroOp] = useState<number | "">("");
+  const [uploadingTicket, setUploadingTicket] = useState(false);
+  const ticketRef = useRef<HTMLInputElement>(null);
 
   const { data: embarques = [], refetch: refetchEmbarques } = trpc.embarques.list.useQuery({});
   const { data: operacoes = [] } = trpc.operacoes.list.useQuery();
@@ -29,6 +32,7 @@ export default function Descargas() {
   );
 
   const save = trpc.descargas.save.useMutation({ onSuccess: () => { refetchEmbarques(); setShowForm(false); setForm({ ...defaultForm }); toast.success("Descarga salva!"); } });
+  const extractTicket = trpc.descargas.extractTicket.useMutation();
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
 
@@ -37,30 +41,84 @@ export default function Descargas() {
   const selectedCompra = compras.find(c => c.id === selectedOp?.compraId);
   const selectedVenda = vendas.find(v => v.id === selectedOp?.vendaId);
 
+  // Embarques em aberto (sem descarga finalizada)
+  const embarquesAbertos = embarques.filter(e => e.status !== "Finalizada");
+  const embarquesFiltrados = filtroOp
+    ? embarquesAbertos.filter(e => e.operacaoId === filtroOp)
+    : embarquesAbertos;
+
   function handleSelectEmbarque(id: number) {
-    set("embarqueId", id);
     const em = embarques.find(e => e.id === id);
-    if (em) {
-      set("placa", em.placa ?? "");
-      set("nfeSaida", em.nfeSaida ?? "");
+    setForm({
+      ...defaultForm,
+      embarqueId: id,
+      placa: em?.placa ?? "",
+      nfeSaida: em?.nfeSaida ?? "",
+    });
+    if (descargaExistente) {
+      setForm((f: any) => ({
+        ...f,
+        dataDescarga: descargaExistente.dataDescarga ? new Date(descargaExistente.dataDescarga).toISOString().slice(0, 10) : "",
+        pesoDescarga: n(descargaExistente.pesoDescarga),
+        placa: descargaExistente.placa ?? em?.placa ?? "",
+        nfeSaida: descargaExistente.nfeSaida ?? em?.nfeSaida ?? "",
+        ticketNumero: descargaExistente.ticketNumero ?? "",
+        ticketUrl: descargaExistente.ticketUrl ?? "",
+        dcUmidade: n(descargaExistente.dcUmidade), dcImp: n(descargaExistente.dcImp),
+        dcAvar: n(descargaExistente.dcAvar), dcQueim: n(descargaExistente.dcQueim) || 1,
+        obs: descargaExistente.obs ?? "",
+      }));
     }
   }
 
-  // Preenche com descarga existente ao selecionar embarque
+  // Preenche com descarga existente ao carregar
   useMemo(() => {
-    if (descargaExistente) {
+    if (descargaExistente && embarqueId > 0) {
       setForm((f: any) => ({
         ...f,
         dataDescarga: descargaExistente.dataDescarga ? new Date(descargaExistente.dataDescarga).toISOString().slice(0, 10) : "",
         pesoDescarga: n(descargaExistente.pesoDescarga),
         placa: descargaExistente.placa ?? f.placa,
         nfeSaida: descargaExistente.nfeSaida ?? f.nfeSaida,
+        ticketNumero: descargaExistente.ticketNumero ?? f.ticketNumero,
+        ticketUrl: descargaExistente.ticketUrl ?? f.ticketUrl,
         dcUmidade: n(descargaExistente.dcUmidade), dcImp: n(descargaExistente.dcImp),
-        dcAvar: n(descargaExistente.dcAvar), dcQueim: n(descargaExistente.dcQueim),
+        dcAvar: n(descargaExistente.dcAvar), dcQueim: n(descargaExistente.dcQueim) || 1,
         obs: descargaExistente.obs ?? "",
       }));
     }
   }, [descargaExistente]);
+
+  async function handleUploadTicket(file: File) {
+    setUploadingTicket(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(",")[1];
+        const result = await extractTicket.mutateAsync({ base64, mimeType: file.type });
+        if (result) {
+          if (result.pesoDescarga) set("pesoDescarga", result.pesoDescarga);
+          if (result.placa) set("placa", result.placa);
+          if (result.dataDescarga) set("dataDescarga", result.dataDescarga);
+          if (result.nfeSaida) set("nfeSaida", result.nfeSaida);
+          if (result.ticketNumero) set("ticketNumero", result.ticketNumero);
+          if (result.ticketUrl) set("ticketUrl", result.ticketUrl);
+          // Classificação — preenche apenas se veio do ticket
+          if (result.dcUmidade !== undefined) set("dcUmidade", result.dcUmidade);
+          if (result.dcImp !== undefined) set("dcImp", result.dcImp);
+          if (result.dcAvar !== undefined) set("dcAvar", result.dcAvar);
+          // Queimado: usa o do ticket se existir, senão mantém padrão 1%
+          set("dcQueim", result.dcQueim !== undefined ? result.dcQueim : 1);
+          toast.success("Ticket lido com sucesso! Verifique os dados e ajuste se necessário.");
+        }
+        setUploadingTicket(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      toast.error("Erro ao processar o ticket.");
+      setUploadingTicket(false);
+    }
+  }
 
   const preview = useMemo(() => {
     if (!selectedEmbarque || !selectedCompra || !selectedVenda || !selectedOp || !cfg) return null;
@@ -101,36 +159,43 @@ export default function Descargas() {
     save.mutate({ ...form, embarqueId: Number(form.embarqueId), pesoDescarga: n(form.pesoDescarga) });
   }
 
-  const embarquesAbertos = embarques.filter(e => e.status !== "Finalizada");
-
   return (
     <div className="space-y-6">
       <SectionHeader
         title="Lançar Descarga"
-        description="Registre a descarga vinculada ao embarque com cálculo automático de resultado"
-        action={
-          <Button size="sm" className="gradient-brand text-white gap-1.5 text-xs" onClick={() => { setForm({ ...defaultForm }); setShowForm(true); }}>
-            <Calculator size={13} /> Lançar Descarga
-          </Button>
-        }
+        description="Selecione a operação para ver as cargas em trânsito e lance a descarga com ticket"
       />
+
+      {/* Filtro por operação */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Truck size={14} className="text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Filtrar por operação:</span>
+        </div>
+        <select className="rounded-lg border border-border bg-input text-foreground px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          value={filtroOp} onChange={e => setFiltroOp(e.target.value ? Number(e.target.value) : "")}>
+          <option value="">Todas as operações</option>
+          {operacoes.map(o => <option key={o.id} value={o.id}>{o.sigla}</option>)}
+        </select>
+        <span className="text-xs text-muted-foreground">{embarquesFiltrados.length} carga{embarquesFiltrados.length !== 1 ? "s" : ""} em aberto</span>
+      </div>
 
       {showForm && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-semibold text-foreground">Descarga</h3>
+              <h3 className="text-sm font-semibold text-foreground">Lançamento de Descarga</h3>
               <button onClick={() => setShowForm(false)} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-5">
               <Field label="Embarque / Carga" required>
                 <select className={selectCls} value={form.embarqueId || ""} onChange={e => handleSelectEmbarque(Number(e.target.value))} required>
                   <option value="">Selecione o embarque...</option>
-                  {embarques.map(em => {
+                  {embarquesAbertos.map(em => {
                     const op = operacoes.find(o => o.id === em.operacaoId);
                     return (
                       <option key={em.id} value={em.id}>
-                        {em.placa || "Sem placa"} — {em.nfeEntrada || "Sem NF"} — {op?.sigla || ""} ({em.status})
+                        {em.placa || "Sem placa"} — NF {em.nfeEntrada || "—"} — {op?.sigla || "—"} — {n(em.pesoOrigem).toLocaleString("pt-BR")} kg
                       </option>
                     );
                   })}
@@ -142,8 +207,31 @@ export default function Descargas() {
                   <div>Operação: <span className="text-foreground font-medium">{selectedOp?.sigla}</span></div>
                   <div>Peso origem: <span className="text-foreground font-medium">{n(selectedEmbarque.pesoOrigem).toLocaleString("pt-BR")} kg</span></div>
                   <div>Status: <span className="text-foreground font-medium">{selectedEmbarque.status}</span></div>
+                  <div>Umidade orig.: <span className="text-foreground">{n(selectedEmbarque.umidade)}%</span></div>
+                  <div>Impureza orig.: <span className="text-foreground">{n(selectedEmbarque.imp)}%</span></div>
+                  <div>Avariado orig.: <span className="text-foreground">{n(selectedEmbarque.avar)}%</span></div>
                 </div>
               )}
+
+              {/* Upload ticket */}
+              <div className="rounded-xl border-2 border-dashed border-border/60 bg-muted/10 p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+                onClick={() => ticketRef.current?.click()}>
+                <input ref={ticketRef} type="file" accept="image/*,application/pdf" className="hidden"
+                  onChange={e => e.target.files?.[0] && handleUploadTicket(e.target.files[0])} />
+                {uploadingTicket ? (
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <Loader2 size={20} className="animate-spin text-primary" />
+                    <p className="text-xs text-muted-foreground">Lendo ticket com IA...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <Upload size={20} className="text-muted-foreground" />
+                    <p className="text-xs font-medium text-foreground">Enviar ticket de descarga</p>
+                    <p className="text-xs text-muted-foreground">PDF ou foto — a IA extrai peso, placa, data, NF e classificação automaticamente</p>
+                    <p className="text-xs text-amber-400/80">Queimado não encontrado no ticket → padrão 1% (editável)</p>
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Data da descarga">
@@ -158,6 +246,9 @@ export default function Descargas() {
                 <Field label="NF de saída">
                   <input className={inputCls} value={form.nfeSaida} onChange={e => set("nfeSaida", e.target.value)} />
                 </Field>
+                <Field label="Número do ticket">
+                  <input className={inputCls} value={form.ticketNumero} onChange={e => set("ticketNumero", e.target.value)} />
+                </Field>
               </div>
 
               <FormSection title="Classificação na descarga">
@@ -169,10 +260,11 @@ export default function Descargas() {
                     { key: "dcQueim", label: "Queimado %" },
                   ].map(f => (
                     <Field key={f.key} label={f.label}>
-                      <input className={inputCls} type="number" step="0.01" value={form[f.key] || ""} onChange={e => set(f.key, Number(e.target.value))} />
+                      <input className={inputCls} type="number" step="0.01" value={form[f.key] ?? ""} onChange={e => set(f.key, Number(e.target.value))} />
                     </Field>
                   ))}
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">Queimado padrão: 1% — altere se o ticket indicar valor diferente.</p>
               </FormSection>
 
               <Field label="Observações">
@@ -183,7 +275,7 @@ export default function Descargas() {
                 <Button type="submit" size="sm" className="gradient-brand text-white text-xs" disabled={save.isPending}>
                   {save.isPending ? "Salvando..." : "Salvar descarga"}
                 </Button>
-                <Button type="button" size="sm" variant="outline" className="text-xs" onClick={() => { setForm({ ...defaultForm }); }}>
+                <Button type="button" size="sm" variant="outline" className="text-xs" onClick={() => setForm({ ...defaultForm })}>
                   Limpar
                 </Button>
               </div>
@@ -225,26 +317,26 @@ export default function Descargas() {
         </div>
       )}
 
-      {/* Lista de embarques para descarga */}
+      {/* Lista de embarques em aberto por operação */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="p-4 border-b border-border/50">
-          <h3 className="text-sm font-semibold text-foreground">Embarques em aberto</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{embarquesAbertos.length} embarque{embarquesAbertos.length !== 1 ? "s" : ""} aguardando descarga</p>
+          <h3 className="text-sm font-semibold text-foreground">Cargas em aberto — aguardando ticket de descarga</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{embarquesFiltrados.length} carga{embarquesFiltrados.length !== 1 ? "s" : ""} em trânsito ou pendente de lançamento</p>
         </div>
         <div className="overflow-x-auto">
-          {embarquesAbertos.length === 0 ? (
-            <EmptyState title="Todos os embarques foram finalizados" description="Lance novos embarques para gerenciar as descargas." />
+          {embarquesFiltrados.length === 0 ? (
+            <EmptyState title="Nenhuma carga em aberto" description={filtroOp ? "Todas as cargas desta operação foram finalizadas." : "Lance novos embarques para gerenciar as descargas."} />
           ) : (
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border/50 bg-muted/30">
-                  {["Operação","Placa","NF Entrada","Data","Peso Orig. (kg)","Status","Ação"].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider">{h}</th>
+                  {["Operação","Placa","NF Entrada","Data Embarque","Peso Orig. (kg)","Umid.","Imp.","Avar.","Status","Ação"].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {embarquesAbertos.map((em, i) => {
+                {embarquesFiltrados.map((em, i) => {
                   const op = operacoes.find(o => o.id === em.operacaoId);
                   return (
                     <tr key={em.id} className={`border-b border-border/30 hover:bg-accent/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
@@ -253,6 +345,9 @@ export default function Descargas() {
                       <td className="px-4 py-3 text-muted-foreground">{em.nfeEntrada || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{em.dataEmbarque ? new Date(em.dataEmbarque).toLocaleDateString("pt-BR") : "—"}</td>
                       <td className="px-4 py-3 font-mono text-right text-foreground">{n(em.pesoOrigem).toLocaleString("pt-BR")}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{n(em.umidade)}%</td>
+                      <td className="px-4 py-3 text-muted-foreground">{n(em.imp)}%</td>
+                      <td className="px-4 py-3 text-muted-foreground">{n(em.avar)}%</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${em.status === "Em trânsito" ? "status-transit" : "status-pending"}`}>
                           {em.status}
@@ -260,7 +355,7 @@ export default function Descargas() {
                       </td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => { handleSelectEmbarque(em.id); setForm((f: any) => ({ ...f, embarqueId: em.id })); setShowForm(true); }}
+                          onClick={() => { handleSelectEmbarque(em.id); setShowForm(true); }}
                           className="text-xs text-primary hover:underline font-medium"
                         >
                           Lançar descarga

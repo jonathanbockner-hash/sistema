@@ -1,18 +1,17 @@
-import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lte, isNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, config, classificadores, contratosCompra, contratosVenda, operacoes, embarques, descargas, pagamentos } from "../drizzle/schema";
+import {
+  InsertUser, users, config, classificadores, corretores,
+  contratosCompra, contratosVenda, operacoes, embarques, descargas, pagamentos
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
+    try { _db = drizzle(process.env.DATABASE_URL); }
+    catch (error) { console.warn("[Database] Failed to connect:", error); _db = null; }
   }
   return _db;
 }
@@ -66,18 +65,12 @@ export async function upsertConfig(data: { fundoMes: number; dmais: number; feth
   if (!db) return;
   const existing = await getConfig();
   const vals = {
-    fundoMes: String(data.fundoMes),
-    dmais: data.dmais,
-    fethabRsTon: String(data.fethabRsTon),
-    iagroRsTon: String(data.iagroRsTon),
-    senarPerc: String(data.senarPerc),
-    funruralPerc: String(data.funruralPerc),
+    fundoMes: String(data.fundoMes), dmais: data.dmais,
+    fethabRsTon: String(data.fethabRsTon), iagroRsTon: String(data.iagroRsTon),
+    senarPerc: String(data.senarPerc), funruralPerc: String(data.funruralPerc),
   };
-  if (existing) {
-    await db.update(config).set(vals).where(eq(config.id, existing.id));
-  } else {
-    await db.insert(config).values(vals);
-  }
+  if (existing) { await db.update(config).set(vals).where(eq(config.id, existing.id)); }
+  else { await db.insert(config).values(vals); }
 }
 
 // ─── Classificadores ─────────────────────────────────────────────────────────
@@ -112,6 +105,43 @@ export async function deleteClassificador(id: number) {
   await db.update(classificadores).set({ ativo: false }).where(eq(classificadores.id, id));
 }
 
+// ─── Corretores ───────────────────────────────────────────────────────────────
+export async function listCorretores() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(corretores).where(eq(corretores.ativo, true)).orderBy(desc(corretores.createdAt));
+}
+
+export async function getCorretor(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(corretores).where(eq(corretores.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertCorretor(data: { id?: number; nome: string; cpfCnpj?: string; pix: string; comissaoTipo: string; comissaoValor: number; obs?: string }) {
+  const db = await getDb();
+  if (!db) return;
+  const payload = {
+    nome: data.nome, cpfCnpj: data.cpfCnpj ?? null, pix: data.pix,
+    comissaoTipo: data.comissaoTipo as any, comissaoValor: String(data.comissaoValor),
+    obs: data.obs ?? null,
+  };
+  if (data.id) {
+    await db.update(corretores).set(payload).where(eq(corretores.id, data.id));
+    return data.id;
+  } else {
+    const result = await db.insert(corretores).values(payload);
+    return (result as any)[0]?.insertId ?? null;
+  }
+}
+
+export async function deleteCorretor(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(corretores).set({ ativo: false }).where(eq(corretores.id, id));
+}
+
 // ─── Contratos de Compra ─────────────────────────────────────────────────────
 export async function listContratosCompra() {
   const db = await getDb();
@@ -132,7 +162,12 @@ export async function upsertContratoCompra(data: any) {
   const payload = {
     sigla: data.sigla, fornecedor: data.fornecedor, produto: data.produto, qualidade: data.qualidade,
     volumeKg: String(data.volumeKg), precoSc: String(data.precoSc),
-    banco: data.banco, agencia: data.agencia, conta: data.conta, favorecido: data.favorecido, docFavorecido: data.docFavorecido, pix: data.pix,
+    banco: data.banco, agencia: data.agencia, conta: data.conta,
+    favorecido: data.favorecido, docFavorecido: data.docFavorecido, pix: data.pix,
+    reterFunrural: data.reterFunrural ?? true,
+    reterFethab: data.reterFethab ?? true,
+    reterIagro: data.reterIagro ?? false,
+    reterSenar: data.reterSenar ?? false,
     umidTol: String(data.umidTol), umidFat: String(data.umidFat),
     impTol: String(data.impTol), impFat: String(data.impFat),
     avarTol: String(data.avarTol), avarFat: String(data.avarFat),
@@ -174,6 +209,15 @@ export async function upsertContratoVenda(data: any) {
   const payload = {
     sigla: data.sigla, comprador: data.comprador, produto: data.produto, qualidade: data.qualidade,
     volumeKg: String(data.volumeKg), precoSc: String(data.precoSc),
+    destinoVenda: data.destinoVenda ?? 'interestadual',
+    finalidadeVenda: data.finalidadeVenda ?? 'industria',
+    regimeCompradora: data.regimeCompradora ?? 'lucro_real',
+    icmsRegime: data.icmsRegime ?? 'diferimento',
+    icmsAliq: String(data.icmsAliq ?? 0),
+    icmsRedBase: String(data.icmsRedBase ?? 0),
+    pisCofinsRegime: data.pisCofinsRegime ?? 'isento',
+    pisAliq: String(data.pisAliq ?? 0),
+    cofinsAliq: String(data.cofinsAliq ?? 0),
     umidTol: String(data.umidTol), umidFat: String(data.umidFat),
     impTol: String(data.impTol), impFat: String(data.impFat),
     avarTol: String(data.avarTol), avarFat: String(data.avarFat),
@@ -217,7 +261,8 @@ export async function upsertOperacao(data: any) {
     freteTon: String(data.freteTon), quebraTol: String(data.quebraTol),
     diasDesagio: data.diasDesagio, comissaoValor: String(data.comissaoValor),
     comissaoTipo: data.comissaoTipo, classificadorId: data.classificadorId ?? null,
-    custoClassTon: String(data.custoClassTon), obs: data.obs ?? null,
+    custoClassTon: String(data.custoClassTon), corretorId: data.corretorId ?? null,
+    obs: data.obs ?? null,
   };
   if (data.id) {
     await db.update(operacoes).set(payload).where(eq(operacoes.id, data.id));
@@ -245,6 +290,15 @@ export async function listEmbarques(filters?: { operacaoId?: number; dataIni?: D
   return conditions.length > 0
     ? db.select().from(embarques).where(and(...conditions)).orderBy(desc(embarques.createdAt))
     : db.select().from(embarques).orderBy(desc(embarques.createdAt));
+}
+
+/** Embarques sem descarga lançada (status Em trânsito ou Descarga pendente) */
+export async function listEmbarquesSemDescarga(operacaoId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [ne(embarques.status, 'Finalizada' as any)];
+  if (operacaoId) conditions.push(eq(embarques.operacaoId, operacaoId));
+  return db.select().from(embarques).where(and(...conditions)).orderBy(desc(embarques.dataEmbarque));
 }
 
 export async function getEmbarque(id: number) {
@@ -302,14 +356,15 @@ export async function upsertDescarga(data: any) {
     dataDescarga: data.dataDescarga ? new Date(data.dataDescarga) : null,
     pesoDescarga: String(data.pesoDescarga),
     placa: data.placa ?? null, nfeSaida: data.nfeSaida ?? null,
+    ticketNumero: data.ticketNumero ?? null,
+    ticketUrl: data.ticketUrl ?? null,
     dcUmidade: String(data.dcUmidade ?? 0), dcImp: String(data.dcImp ?? 0),
-    dcAvar: String(data.dcAvar ?? 0), dcQueim: String(data.dcQueim ?? 0),
+    dcAvar: String(data.dcAvar ?? 0), dcQueim: String(data.dcQueim ?? 1),
     obs: data.obs ?? null,
   };
   const existing = await getDescargaByEmbarque(data.embarqueId);
   if (existing) {
     await db.update(descargas).set(payload).where(eq(descargas.id, existing.id));
-    // Update embarque status
     await db.update(embarques).set({ status: 'Finalizada', nfeSaida: data.nfeSaida ?? null, placa: data.placa ?? null }).where(eq(embarques.id, data.embarqueId));
     return existing.id;
   } else {
@@ -335,7 +390,11 @@ export async function upsertPagamento(data: any) {
     compraId: data.compraId,
     dataPagamento: data.dataPagamento ? new Date(data.dataPagamento) : null,
     valor: String(data.valor), banco: data.banco ?? null,
-    comprovante: data.comprovante ?? null, obs: data.obs ?? null,
+    formaPagamento: data.formaPagamento ?? 'pix',
+    numeroBoleto: data.numeroBoleto ?? null,
+    chavePix: data.chavePix ?? null,
+    comprovanteUrl: data.comprovanteUrl ?? null,
+    obs: data.obs ?? null,
   };
   if (data.id) {
     await db.update(pagamentos).set(payload).where(eq(pagamentos.id, data.id));

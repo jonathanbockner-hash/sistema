@@ -9,6 +9,7 @@ import ContratosCompra from "./pages/ContratosCompra";
 import ContratosVenda from "./pages/ContratosVenda";
 import Operacoes from "./pages/Operacoes";
 import Classificadores from "./pages/Classificadores";
+import Corretores from "./pages/Corretores";
 import Embarques from "./pages/Embarques";
 import Descargas from "./pages/Descargas";
 import Pagamentos from "./pages/Pagamentos";
@@ -25,6 +26,7 @@ function Router() {
         <Route path="/contratos-venda" component={ContratosVenda} />
         <Route path="/operacoes" component={Operacoes} />
         <Route path="/classificadores" component={Classificadores} />
+        <Route path="/corretores" component={Corretores} />
         <Route path="/embarques" component={Embarques} />
         <Route path="/descargas" component={Descargas} />
         <Route path="/pagamentos" component={Pagamentos} />

@@ -23,7 +23,7 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, ShoppingCart, TrendingUp,
-  Link2, Users, Truck, Package, CreditCard, FileText, Settings, Wheat
+  Link2, Users, Truck, Package, CreditCard, FileText, Settings, Wheat, Handshake
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -36,6 +36,7 @@ const menuItems = [
   { icon: TrendingUp, label: "Contratos de Venda", path: "/contratos-venda" },
   { icon: Link2, label: "Operações", path: "/operacoes" },
   { icon: Users, label: "Classificadores", path: "/classificadores" },
+  { icon: Handshake, label: "Corretores", path: "/corretores" },
   { icon: Truck, label: "Lançar Embarque", path: "/embarques" },
   { icon: Package, label: "Lançar Descarga", path: "/descargas" },
   { icon: CreditCard, label: "Pagamentos Compra", path: "/pagamentos" },

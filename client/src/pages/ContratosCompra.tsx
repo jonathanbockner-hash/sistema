@@ -3,16 +3,35 @@ import { trpc } from "@/lib/trpc";
 import { SectionHeader, FormSection, Field, EmptyState, inputCls, selectCls, textareaCls } from "@/components/TimeOpsComponents";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, X } from "lucide-react";
+import { Pencil, Trash2, Plus, X, ShieldCheck, ShieldOff } from "lucide-react";
 import { n } from "@/lib/calculos";
 
 const defaultForm = {
   sigla: "", fornecedor: "", produto: "Soja", qualidade: "Padrão",
   volumeKg: 0, precoSc: 0,
   banco: "", agencia: "", conta: "", favorecido: "", docFavorecido: "", pix: "",
+  reterFunrural: true, reterFethab: true, reterIagro: false, reterSenar: false,
   umidTol: 14, umidFat: 1.8, impTol: 1, impFat: 1, avarTol: 20, avarFat: 1, queimTol: 1, queimFat: 1,
   obs: "",
 };
+
+function ToggleSwitch({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={`flex items-start gap-3 p-3 rounded-lg border transition-all text-left w-full ${checked ? "border-emerald-500/50 bg-emerald-500/10" : "border-border bg-muted/20"}`}
+    >
+      <div className={`mt-0.5 flex-shrink-0 w-8 h-4 rounded-full transition-colors relative ${checked ? "bg-emerald-500" : "bg-muted-foreground/30"}`}>
+        <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform shadow ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
+      </div>
+      <div>
+        <p className={`text-xs font-semibold ${checked ? "text-emerald-400" : "text-muted-foreground"}`}>{label}</p>
+        {desc && <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>}
+      </div>
+    </button>
+  );
+}
 
 export default function ContratosCompra() {
   const [form, setForm] = useState<any>({ ...defaultForm });
@@ -30,6 +49,10 @@ export default function ContratosCompra() {
       sigla: c.sigla, fornecedor: c.fornecedor, produto: c.produto, qualidade: c.qualidade,
       volumeKg: n(c.volumeKg), precoSc: n(c.precoSc),
       banco: c.banco, agencia: c.agencia, conta: c.conta, favorecido: c.favorecido, docFavorecido: c.docFavorecido, pix: c.pix,
+      reterFunrural: c.reterFunrural ?? true,
+      reterFethab: c.reterFethab ?? true,
+      reterIagro: c.reterIagro ?? false,
+      reterSenar: c.reterSenar ?? false,
       umidTol: n(c.umidTol), umidFat: n(c.umidFat), impTol: n(c.impTol), impFat: n(c.impFat),
       avarTol: n(c.avarTol), avarFat: n(c.avarFat), queimTol: n(c.queimTol), queimFat: n(c.queimFat),
       obs: c.obs ?? "",
@@ -42,6 +65,8 @@ export default function ContratosCompra() {
     e.preventDefault();
     save.mutate({ ...form, ...(editId ? { id: editId } : {}) });
   }
+
+  const retencaoAtiva = form.reterFunrural || form.reterFethab || form.reterIagro || form.reterSenar;
 
   return (
     <div className="space-y-6">
@@ -110,6 +135,49 @@ export default function ContratosCompra() {
               </div>
             </FormSection>
 
+            <FormSection title="Retenção tributária">
+              <div className="mb-3 p-3 rounded-lg bg-muted/20 border border-border/50">
+                <div className="flex items-center gap-2 mb-1">
+                  {retencaoAtiva
+                    ? <ShieldCheck size={14} className="text-emerald-400" />
+                    : <ShieldOff size={14} className="text-amber-400" />}
+                  <p className="text-xs font-semibold text-foreground">
+                    {retencaoAtiva ? "A trading reterá os tributos marcados na fonte" : "Nenhuma retenção — obrigação é do vendedor"}
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Para fornecedores PJ que recolhem por conta própria, desative os tributos correspondentes.
+                  Os valores das alíquotas são configurados em <strong>Configurações</strong>.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <ToggleSwitch
+                  checked={form.reterFunrural}
+                  onChange={v => set("reterFunrural", v)}
+                  label="FUNRURAL"
+                  desc="PF: 1,63% | PJ: 2,23% sobre valor bruto"
+                />
+                <ToggleSwitch
+                  checked={form.reterFethab}
+                  onChange={v => set("reterFethab", v)}
+                  label="FETHAB"
+                  desc="R$/ton — soja MT: R$ 48,70/t"
+                />
+                <ToggleSwitch
+                  checked={form.reterIagro}
+                  onChange={v => set("reterIagro", v)}
+                  label="IAGRO"
+                  desc="R$/ton — já incluso no FETHAB soja MT"
+                />
+                <ToggleSwitch
+                  checked={form.reterSenar}
+                  onChange={v => set("reterSenar", v)}
+                  label="SENAR"
+                  desc="0,20% — incluso no FUNRURAL PF"
+                />
+              </div>
+            </FormSection>
+
             <FormSection title="Classificação na origem">
               <div className="grid grid-cols-4 gap-3">
                 {[
@@ -157,30 +225,41 @@ export default function ContratosCompra() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border/50 bg-muted/30">
-                  {["Sigla","Fornecedor","Produto","Qualidade","Volume (kg)","Preço R$/sc","Banco","Favorecido","Ações"].map(h => (
+                  {["Sigla","Fornecedor","Produto","Volume (kg)","Preço R$/sc","Retenções","Favorecido","Ações"].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-muted-foreground font-semibold uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {compras.map((c, i) => (
-                  <tr key={c.id} className={`border-b border-border/30 hover:bg-accent/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                    <td className="px-4 py-3 font-medium text-foreground">{c.sigla}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.fornecedor}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.produto}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.qualidade}</td>
-                    <td className="px-4 py-3 font-mono text-right text-foreground">{n(c.volumeKg).toLocaleString("pt-BR")}</td>
-                    <td className="px-4 py-3 font-mono text-right text-foreground">{n(c.precoSc).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.banco}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.favorecido}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        <button onClick={() => handleEdit(c)} className="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"><Pencil size={12} /></button>
-                        <button onClick={() => del.mutate({ id: c.id })} className="p-1.5 rounded-md hover:bg-destructive/20 transition-colors text-muted-foreground hover:text-destructive"><Trash2 size={12} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {compras.map((c, i) => {
+                  const retencoes = [
+                    c.reterFunrural && "FUNRURAL",
+                    c.reterFethab && "FETHAB",
+                    c.reterIagro && "IAGRO",
+                    c.reterSenar && "SENAR",
+                  ].filter(Boolean);
+                  return (
+                    <tr key={c.id} className={`border-b border-border/30 hover:bg-accent/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
+                      <td className="px-4 py-3 font-medium text-foreground">{c.sigla}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.fornecedor}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.produto}</td>
+                      <td className="px-4 py-3 font-mono text-right text-foreground">{n(c.volumeKg).toLocaleString("pt-BR")}</td>
+                      <td className="px-4 py-3 font-mono text-right text-foreground">{n(c.precoSc).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                      <td className="px-4 py-3">
+                        {retencoes.length > 0
+                          ? <div className="flex flex-wrap gap-1">{retencoes.map((r, idx) => <span key={idx} className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 font-medium">{r}</span>)}</div>
+                          : <span className="text-xs text-amber-400">Sem retenção</span>}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.favorecido}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1">
+                          <button onClick={() => handleEdit(c)} className="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"><Pencil size={12} /></button>
+                          <button onClick={() => del.mutate({ id: c.id })} className="p-1.5 rounded-md hover:bg-destructive/20 transition-colors text-muted-foreground hover:text-destructive"><Trash2 size={12} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

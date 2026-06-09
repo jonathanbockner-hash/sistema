@@ -25,22 +25,13 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // ─── Configurações Gerais ────────────────────────────────────────────────────
-// FETHAB/IAGRO: R$ por tonelada (baseado na UPF-MT semestral)
-// SENAR/FUNRURAL: % sobre o valor bruto de compra
 export const config = mysqlTable("config", {
   id: int("id").autoincrement().primaryKey(),
   fundoMes: decimal("fundoMes", { precision: 10, scale: 4 }).default("2.5").notNull(),
   dmais: int("dmais").default(2).notNull(),
-  // FETHAB soja MT: 20% UPF/ton = R$ 48,70/ton (UPF 243,49 × 20% = R$ 48,70)
-  // FETHAB milho MT: 6% UPF/ton = R$ 14,61/ton (apenas interestaduais/exportação)
   fethabRsTon: decimal("fethabRsTon", { precision: 10, scale: 4 }).default("48.7000").notNull(),
-  // IAGRO soja MT: 1,15% UPF/ton = R$ 2,80/ton (já incluso no FETHAB soja; usar 0 para evitar dupla contagem)
   iagroRsTon: decimal("iagroRsTon", { precision: 10, scale: 4 }).default("0.0000").notNull(),
-  // SENAR: 0,20% sobre receita bruta (para PF sem FUNRURAL)
-  // Quando usar FUNRURAL PF (1,63%), zerar SENAR pois já está incluso
   senarPerc: decimal("senarPerc", { precision: 10, scale: 4 }).default("0.0000").notNull(),
-  // FUNRURAL PF: 1,63% (INSS 1,32% + RAT 0,11% + SENAR 0,20%) — vigente abr/2026
-  // FUNRURAL PJ: 2,23% (Funrural+RAT 1,98% + SENAR 0,25%)
   funruralPerc: decimal("funruralPerc", { precision: 10, scale: 4 }).default("1.6300").notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -51,6 +42,21 @@ export const classificadores = mysqlTable("classificadores", {
   nome: varchar("nome", { length: 255 }).notNull(),
   cpf: varchar("cpf", { length: 20 }),
   pix: varchar("pix", { length: 255 }).notNull(),
+  obs: text("obs"),
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── Corretores ───────────────────────────────────────────────────────────────
+export const corretores = mysqlTable("corretores", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  cpfCnpj: varchar("cpfCnpj", { length: 20 }),
+  pix: varchar("pix", { length: 255 }).notNull(),
+  /** Tipo de comissão: sc = por saca, ton = por tonelada, fixo = valor fixo, perc = % sobre venda */
+  comissaoTipo: mysqlEnum("comissaoTipo", ["sc", "ton", "fixo", "perc"]).default("sc").notNull(),
+  comissaoValor: decimal("comissaoValor", { precision: 10, scale: 4 }).default("0.0000").notNull(),
   obs: text("obs"),
   ativo: boolean("ativo").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -73,6 +79,12 @@ export const contratosCompra = mysqlTable("contratos_compra", {
   favorecido: varchar("favorecido", { length: 255 }).notNull(),
   docFavorecido: varchar("docFavorecido", { length: 20 }).notNull(),
   pix: varchar("pix", { length: 255 }).notNull(),
+  // Retenção tributária — quais tributos a trading retém na fonte
+  // false = obrigação é do vendedor (ex: PJ que recolhe por conta própria)
+  reterFunrural: boolean("reterFunrural").default(true).notNull(),
+  reterFethab: boolean("reterFethab").default(true).notNull(),
+  reterIagro: boolean("reterIagro").default(false).notNull(),
+  reterSenar: boolean("reterSenar").default(false).notNull(),
   // Classificação origem
   umidTol: decimal("umidTol", { precision: 8, scale: 4 }).default("14.0000").notNull(),
   umidFat: decimal("umidFat", { precision: 8, scale: 4 }).default("1.8000").notNull(),
@@ -97,6 +109,32 @@ export const contratosVenda = mysqlTable("contratos_venda", {
   qualidade: varchar("qualidade", { length: 100 }).notNull(),
   volumeKg: decimal("volumeKg", { precision: 15, scale: 2 }).notNull(),
   precoSc: decimal("precoSc", { precision: 10, scale: 4 }).notNull(),
+  // Tributação de venda
+  /** Destino: "intraestadual" = dentro do MT, "interestadual" = fora do MT */
+  destinoVenda: mysqlEnum("destinoVenda", ["intraestadual", "interestadual"]).default("interestadual").notNull(),
+  /**
+   * Finalidade do comprador:
+   * industria = indústria de processamento (esmagamento, farelo, óleo)
+   * racao = fábrica de ração
+   * confinamento = confinamento/engorda
+   * exportacao = comercialização com fim específico de exportação (RECOF/drawback)
+   * trading = outra trading (mercado interno)
+   * outro = outros usos
+   */
+  finalidadeVenda: mysqlEnum("finalidadeVenda", ["industria", "racao", "confinamento", "exportacao", "trading", "outro"]).default("industria").notNull(),
+  /**
+   * Regime tributário da compradora:
+   * lucro_real | lucro_presumido | simples | isento
+   */
+  regimeCompradora: mysqlEnum("regimeCompradora", ["lucro_real", "lucro_presumido", "simples", "isento"]).default("lucro_real").notNull(),
+  /** ICMS: diferimento, isencao, normal */
+  icmsRegime: mysqlEnum("icmsRegime", ["diferimento", "isencao", "normal"]).default("diferimento").notNull(),
+  icmsAliq: decimal("icmsAliq", { precision: 8, scale: 4 }).default("0.0000").notNull(),
+  icmsRedBase: decimal("icmsRedBase", { precision: 8, scale: 4 }).default("0.0000").notNull(),
+  /** PIS/COFINS: isento, monofasico, normal */
+  pisCofinsRegime: mysqlEnum("pisCofinsRegime", ["isento", "monofasico", "normal"]).default("isento").notNull(),
+  pisAliq: decimal("pisAliq", { precision: 8, scale: 4 }).default("0.0000").notNull(),
+  cofinsAliq: decimal("cofinsAliq", { precision: 8, scale: 4 }).default("0.0000").notNull(),
   // Classificação descarga
   umidTol: decimal("umidTol", { precision: 8, scale: 4 }).default("14.0000").notNull(),
   umidFat: decimal("umidFat", { precision: 8, scale: 4 }).default("1.8000").notNull(),
@@ -125,6 +163,7 @@ export const operacoes = mysqlTable("operacoes", {
   comissaoTipo: mysqlEnum("comissaoTipo", ["sc", "ton", "fixo", "percVenda"]).default("sc").notNull(),
   classificadorId: int("classificadorId"),
   custoClassTon: decimal("custoClassTon", { precision: 10, scale: 6 }).default("0.017000").notNull(),
+  corretorId: int("corretorId"),
   obs: text("obs"),
   ativo: boolean("ativo").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -141,7 +180,6 @@ export const embarques = mysqlTable("embarques", {
   nfeSaida: varchar("nfeSaida", { length: 100 }),
   pesoOrigem: decimal("pesoOrigem", { precision: 15, scale: 2 }).notNull(),
   status: mysqlEnum("status", ["Em trânsito", "Descarga pendente", "Finalizada"]).default("Em trânsito").notNull(),
-  // Classificação origem
   umidade: decimal("umidade", { precision: 8, scale: 4 }).default("0.0000"),
   imp: decimal("imp", { precision: 8, scale: 4 }).default("0.0000"),
   avar: decimal("avar", { precision: 8, scale: 4 }).default("0.0000"),
@@ -158,11 +196,12 @@ export const descargas = mysqlTable("descargas", {
   pesoDescarga: decimal("pesoDescarga", { precision: 15, scale: 2 }).notNull(),
   placa: varchar("placa", { length: 20 }),
   nfeSaida: varchar("nfeSaida", { length: 100 }),
-  // Classificação descarga
+  ticketNumero: varchar("ticketNumero", { length: 100 }),
+  ticketUrl: varchar("ticketUrl", { length: 1000 }),
   dcUmidade: decimal("dcUmidade", { precision: 8, scale: 4 }).default("0.0000"),
   dcImp: decimal("dcImp", { precision: 8, scale: 4 }).default("0.0000"),
   dcAvar: decimal("dcAvar", { precision: 8, scale: 4 }).default("0.0000"),
-  dcQueim: decimal("dcQueim", { precision: 8, scale: 4 }).default("0.0000"),
+  dcQueim: decimal("dcQueim", { precision: 8, scale: 4 }).default("1.0000"),
   obs: text("obs"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -175,7 +214,10 @@ export const pagamentos = mysqlTable("pagamentos", {
   dataPagamento: timestamp("dataPagamento"),
   valor: decimal("valor", { precision: 15, scale: 2 }).notNull(),
   banco: varchar("banco", { length: 100 }),
-  comprovante: varchar("comprovante", { length: 500 }),
+  formaPagamento: mysqlEnum("formaPagamento", ["pix", "ted", "doc", "boleto", "cheque", "outro"]).default("pix").notNull(),
+  numeroBoleto: varchar("numeroBoleto", { length: 255 }),
+  chavePix: varchar("chavePix", { length: 255 }),
+  comprovanteUrl: varchar("comprovanteUrl", { length: 1000 }),
   obs: text("obs"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
