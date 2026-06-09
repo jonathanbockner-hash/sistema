@@ -79,6 +79,7 @@ export default function Relatorios() {
   }, [embarquesFiltrados, operacoes, compras, vendas, descargas, cfg]);
 
   const totais = useMemo(() => linhas.reduce((acc, l) => ({
+    pesoBal: acc.pesoBal + (l.desc ? n(l.desc.pesoDescarga) : n(l.em.pesoOrigem)),
     pesoOrigem: acc.pesoOrigem + n(l.em.pesoOrigem),
     pesoDescarga: acc.pesoDescarga + n(l.desc?.pesoDescarga ?? 0),
     kgCompra: acc.kgCompra + l.calc.kgCompra,
@@ -94,7 +95,7 @@ export default function Relatorios() {
     resultado: acc.resultado + l.calc.resultado,
     quebraKg: acc.quebraKg + l.calc.quebraKg,
     avar: acc.avar + l.calc.kgCompra * (n(l.em.avar) / 100),
-  }), { pesoOrigem: 0, pesoDescarga: 0, kgCompra: 0, valorCompra: 0, retencoes: 0, valorPagar: 0, kgVenda: 0, valorVenda: 0, frete: 0, comissao: 0, classCusto: 0, desagio: 0, resultado: 0, quebraKg: 0, avar: 0 }), [linhas]);
+  }), { pesoBal: 0, pesoOrigem: 0, pesoDescarga: 0, kgCompra: 0, valorCompra: 0, retencoes: 0, valorPagar: 0, kgVenda: 0, valorVenda: 0, frete: 0, comissao: 0, classCusto: 0, desagio: 0, resultado: 0, quebraKg: 0, avar: 0 }), [linhas]);
 
   // Dados do contrato selecionado para o cabeçalho
   const ccSel = contratoCompraId ? compras.find(c => c.id === contratoCompraId) : (linhas[0]?.cc ?? null);
@@ -102,11 +103,19 @@ export default function Relatorios() {
   const opSel = operacaoId ? operacoes.find(o => o.id === operacaoId) : (linhas[0]?.op ?? null);
 
   // Pagamentos do contrato de compra selecionado
-  const pgtos = contratoCompraId
-    ? pagamentos.filter((p: any) => p.contratoCompraId === contratoCompraId)
-    : [];
+  // Pagamentos: se contrato selecionado, filtra por ele; senão soma todos os contratos das linhas
+  const contratoIdsNasLinhas = useMemo(() => {
+    const ids: number[] = [];
+    linhas.forEach(l => { if (l.cc?.id && !ids.includes(l.cc.id)) ids.push(l.cc.id); });
+    return ids;
+  }, [linhas]);
+  const pgtos = useMemo(() => {
+    if (contratoCompraId) return pagamentos.filter((p: any) => p.contratoCompraId === contratoCompraId);
+    return pagamentos.filter((p: any) => contratoIdsNasLinhas.includes(p.contratoCompraId));
+  }, [pagamentos, contratoCompraId, contratoIdsNasLinhas]);
   const totalPago = pgtos.reduce((s: number, p: any) => s + n(p.valor), 0);
   const saldoPagar = totais.valorPagar - totalPago;
+  const temCredito = saldoPagar < -0.01;
 
   // Datas de entrega
   const datasEmbarque = linhas.map(l => l.em.dataEmbarque).filter(Boolean).sort();
@@ -116,15 +125,20 @@ export default function Relatorios() {
   function exportCSV() {
     const headers = ["NF Compra","NF Venda","Data NFe","Placa","Peso Nota","Peso Difer.","Peso Balanço","% Imp.","Desc. Imp.","% Umid.","Desc. Umid.","% Avar.","Desc. Avar.","Peso Líquido","Valor Total","SENAR/FUNRURAL","Valor Líquido"];
     const rows = linhas.map(l => {
-      const descImp = l.calc.kgCompra * (n(l.em.imp) / 100);
-      const descUmid = l.calc.kgCompra * (n(l.em.umidade) / 100);
-      const descAvar = l.calc.kgCompra * (n(l.em.avar) / 100);
+      // Descontos reais com tolerância aplicada
+      const clsRef = l.desc ? l.calc.clsCompraDesc : l.calc.clsOrig;
+      const descImp = clsRef.imp.kgDesc;
+      const descUmid = clsRef.umid.kgDesc;
+      const descAvar = clsRef.avar.kgDesc;
+      const pesoBal = l.desc ? n(l.desc.pesoDescarga) : n(l.em.pesoOrigem);
+      const pesoDifer = n(l.em.pesoOrigem) - pesoBal;
       return [
         l.em.nfeEntrada ?? "", l.em.nfeSaida ?? "",
         fmtDate(l.em.dataEmbarque), l.em.placa ?? "",
-        fmt(n(l.em.pesoOrigem)), fmt(l.calc.quebraKg), "0",
-        fmt(n(l.em.imp)), fmt(descImp), fmt(n(l.em.umidade)), fmt(descUmid),
-        fmt(n(l.em.avar)), fmt(descAvar),
+        fmt(n(l.em.pesoOrigem)), pesoDifer > 0 ? fmt(-pesoDifer) : "0", fmt(pesoBal),
+        fmt(n(l.em.imp)), descImp > 0 ? fmt(descImp) : "0,00",
+        fmt(n(l.em.umidade)), descUmid > 0 ? fmt(descUmid) : "0,00",
+        fmt(n(l.em.avar)), descAvar > 0 ? fmt(descAvar) : "0,00",
         fmt(l.calc.kgCompra), fmt(l.calc.valorCompra), fmt(l.calc.retencoes), fmt(l.calc.valorPagar),
       ];
     });
@@ -296,9 +310,15 @@ export default function Relatorios() {
                 </thead>
                 <tbody>
                   {linhas.map((l, i) => {
-                    const descImp = l.calc.kgCompra * (n(l.em.imp) / 100);
-                    const descUmid = l.calc.kgCompra * (n(l.em.umidade) / 100);
-                    const descAvar = l.calc.kgCompra * (n(l.em.avar) / 100);
+                    // Descontos reais de classificação (já aplicam tolerância via calcFinal)
+                    const clsRef = l.desc ? l.calc.clsCompraDesc : l.calc.clsOrig;
+                    const descImp = clsRef.imp.kgDesc;
+                    const descUmid = clsRef.umid.kgDesc;
+                    const descAvar = clsRef.avar.kgDesc;
+                    // Peso balança = peso de descarga (se houver), senão peso origem
+                    const pesoBal = l.desc ? n(l.desc.pesoDescarga) : n(l.em.pesoOrigem);
+                    // Diferença entre peso nota e peso balança
+                    const pesoDifer = n(l.em.pesoOrigem) - pesoBal;
                     return (
                       <tr key={l.em.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                         <td className="border border-gray-200 px-1 py-0.5 text-center">{l.em.nfeEntrada || "—"}</td>
@@ -306,14 +326,14 @@ export default function Relatorios() {
                         <td className="border border-gray-200 px-1 py-0.5 text-center whitespace-nowrap">{fmtDate(l.em.dataEmbarque)}</td>
                         <td className="border border-gray-200 px-1 py-0.5 text-center">{l.em.placa || "—"}</td>
                         <td className="border border-gray-200 px-1 py-0.5 text-right">{fmt(n(l.em.pesoOrigem), 0)}</td>
-                        <td className="border border-gray-200 px-1 py-0.5 text-right text-red-700">{l.calc.quebraKg > 0 ? `-${fmt(l.calc.quebraKg, 0)}` : "0"}</td>
-                        <td className="border border-gray-200 px-1 py-0.5 text-right">0</td>
+                        <td className="border border-gray-200 px-1 py-0.5 text-right text-red-700">{pesoDifer > 0 ? `-${fmt(pesoDifer, 0)}` : "0"}</td>
+                        <td className="border border-gray-200 px-1 py-0.5 text-right font-semibold">{fmt(pesoBal, 0)}</td>
                         <td className="border border-gray-200 px-1 py-0.5 text-right">{fmt(n(l.em.imp), 2)}</td>
-                        <td className="border border-gray-200 px-1 py-0.5 text-right">{fmt(descImp, 2)}</td>
+                        <td className="border border-gray-200 px-1 py-0.5 text-right">{descImp > 0 ? fmt(descImp, 2) : "0,00"}</td>
                         <td className="border border-gray-200 px-1 py-0.5 text-right">{fmt(n(l.em.umidade), 2)}</td>
-                        <td className="border border-gray-200 px-1 py-0.5 text-right">{fmt(descUmid, 2)}</td>
+                        <td className="border border-gray-200 px-1 py-0.5 text-right">{descUmid > 0 ? fmt(descUmid, 2) : "0,00"}</td>
                         <td className="border border-gray-200 px-1 py-0.5 text-right">{fmt(n(l.em.avar), 2)}</td>
-                        <td className="border border-gray-200 px-1 py-0.5 text-right">{fmt(descAvar, 2)}</td>
+                        <td className="border border-gray-200 px-1 py-0.5 text-right">{descAvar > 0 ? fmt(descAvar, 2) : "0,00"}</td>
                         <td className="border border-gray-200 px-1 py-0.5 text-right font-semibold">{fmt(l.calc.kgCompra, 3)}</td>
                         <td className="border border-gray-200 px-1 py-0.5 text-right font-semibold">{fmt(l.calc.valorCompra, 2)}</td>
                         <td className="border border-gray-200 px-1 py-0.5 text-right text-red-700">{fmt(l.calc.retencoes, 2)}</td>
@@ -326,8 +346,8 @@ export default function Relatorios() {
                   <tr className="bg-gray-200 border-t-2 border-gray-400 font-bold">
                     <td className="border border-gray-300 px-1 py-1 text-center" colSpan={4}>TOTAL: {linhas.length}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right">{fmt(totais.pesoOrigem, 0)}</td>
-                    <td className="border border-gray-300 px-1 py-1 text-right text-red-700">{totais.quebraKg > 0 ? `-${fmt(totais.quebraKg, 0)}` : "0"}</td>
-                    <td className="border border-gray-300 px-1 py-1 text-right">0</td>
+                    <td className="border border-gray-300 px-1 py-1 text-right text-red-700">{(totais.pesoOrigem - totais.pesoBal) > 0 ? `-${fmt(totais.pesoOrigem - totais.pesoBal, 0)}` : "0"}</td>
+                    <td className="border border-gray-300 px-1 py-1 text-right font-bold">{fmt(totais.pesoBal, 0)}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right">—</td>
                     <td className="border border-gray-300 px-1 py-1 text-right">—</td>
                     <td className="border border-gray-300 px-1 py-1 text-right">—</td>
@@ -353,7 +373,11 @@ export default function Relatorios() {
                   <tbody className="space-y-1">
                     <tr><td className="font-semibold py-0.5">Valor a Pagar:</td><td className="text-right font-bold">{brl(totais.valorPagar)}</td></tr>
                     <tr><td className="font-semibold py-0.5">Valor Pago:</td><td className="text-right">{brl(totalPago)}</td></tr>
-                    <tr className="border-t border-gray-200"><td className="font-bold py-0.5 text-red-700">Saldo Pagar:</td><td className="text-right font-bold text-red-700">{brl(saldoPagar)}</td></tr>
+                    {temCredito ? (
+                      <tr className="border-t border-gray-200"><td className="font-bold py-0.5 text-green-700">Crédito c/ Fornecedor:</td><td className="text-right font-bold text-green-700">{brl(Math.abs(saldoPagar))}</td></tr>
+                    ) : (
+                      <tr className="border-t border-gray-200"><td className="font-bold py-0.5 text-red-700">Saldo a Pagar:</td><td className="text-right font-bold text-red-700">{brl(saldoPagar)}</td></tr>
+                    )}
                   </tbody>
                 </table>
                 <div className="mt-3 border-t border-gray-200 pt-2">

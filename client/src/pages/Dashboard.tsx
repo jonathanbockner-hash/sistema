@@ -102,7 +102,9 @@ export default function Dashboard() {
     const custoOperacional = totalFrete + totalClassCusto + totalDesagio + totalPrejuQuebra;
     const lucroLiquido = lucroBruto - custoOperacional - totalComissao;
     const totalPago = pagamentos.reduce((a: number, p: any) => a + n(p.valor), 0);
-    const saldoPendente = Math.max(0, totalValorCompra - totalPago);
+    const saldoLiquido = totalValorCompra - totalPago; // negativo = crédito com fornecedor
+    const saldoPendente = Math.max(0, saldoLiquido);
+    const creditoFornecedor = Math.max(0, -saldoLiquido);
 
     return {
       totalPesoOrigem,
@@ -116,6 +118,7 @@ export default function Dashboard() {
       totalFrete,
       totalPago,
       saldoPendente,
+      creditoFornecedor,
       emAberto,
       finalizadas,
     };
@@ -211,7 +214,15 @@ export default function Dashboard() {
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-0.5">Pagamentos &amp; Cargas</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           <KpiCard label="Total pago" value={brl(kpis.totalPago)} trend="up" />
-          <KpiCard label="Saldo a pagar" value={brl(kpis.saldoPendente)} trend={kpis.saldoPendente > 0 ? "down" : "up"} />
+          {kpis.creditoFornecedor > 0.01 ? (
+            <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/5 p-4 space-y-1">
+              <p className="text-xs text-emerald-400 font-semibold">Crédito c/ Fornecedor</p>
+              <p className="text-xl font-bold font-mono text-emerald-400">{brl(kpis.creditoFornecedor)}</p>
+              <p className="text-xs text-muted-foreground">Pagamento superior ao saldo</p>
+            </div>
+          ) : (
+            <KpiCard label="Saldo a pagar" value={brl(kpis.saldoPendente)} trend={kpis.saldoPendente > 0 ? "down" : "up"} />
+          )}
           <KpiCard label="Cargas em trânsito" value={String(kpis.emAberto)} trend={kpis.emAberto > 0 ? "neutral" : "up"} />
           <KpiCard label="Cargas finalizadas" value={String(kpis.finalizadas)} trend="up" />
         </div>

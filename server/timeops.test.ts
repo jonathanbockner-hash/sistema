@@ -271,3 +271,60 @@ describe("tributação por destino — Contrato de Venda", () => {
     expect(r.custoPisCofins).toBe(0);
   });
 });
+
+// ─── Bug v6: Desconto de classificação só acima da tolerância ─────────────────
+
+describe("desconto de classificação — tolerância", () => {
+  const base = {
+    pesoOrigem: 60000, pesoDescarga: 60000,
+    dcUmidade: 14, dcImp: 1, dcAvar: 40, dcQueim: 1,
+    cc: { precoSc: 108, umidTol: 14, umidFat: 1, impTol: 1, impFat: 1, avarTol: 60, avarFat: 1, queimTol: 1, queimFat: 1 },
+    cv: { precoSc: 110, umidTol: 14, umidFat: 1, impTol: 1, impFat: 1, avarTol: 60, avarFat: 1, queimTol: 1, queimFat: 1 },
+    op: { freteTon: 0, quebraTol: 0, diasDesagio: 0, comissaoValor: 0, comissaoTipo: "fixo" as const, custoClassTon: 0 },
+    cfg: cfgNovo,
+  };
+
+  it("umidade dentro da tolerância (14% ≤ tol 14%) → sem desconto de umidade", () => {
+    const r = calcFinal({ ...base, umidade: 14, imp: 1, avar: 40, queim: 1 });
+    // umidade = tolerância → excedente = 0 → desconto umidade = 0
+    expect(r.clsOrig.umid.kgDesc).toBe(0);
+  });
+
+  it("impureza dentro da tolerância (1% ≤ tol 1%) → sem desconto de impureza", () => {
+    const r = calcFinal({ ...base, umidade: 14, imp: 1, avar: 40, queim: 1 });
+    expect(r.clsOrig.imp.kgDesc).toBe(0);
+  });
+
+  it("avariado dentro da tolerância (40% ≤ tol 60%) → sem desconto de avariado", () => {
+    const r = calcFinal({ ...base, umidade: 14, imp: 1, avar: 40, queim: 1 });
+    expect(r.clsOrig.avar.kgDesc).toBe(0);
+  });
+
+  it("umidade acima da tolerância (15% > tol 14%) → aplica desconto", () => {
+    const r = calcFinal({ ...base, umidade: 15, imp: 1, avar: 40, queim: 1 });
+    // excedente = 1%, fator = 1 → desconto = 60000 * 0.01 * 1 = 600 kg
+    expect(r.clsOrig.umid.kgDesc).toBeCloseTo(600, 1);
+  });
+});
+
+// ─── Bug v6: Crédito com fornecedor quando pagamento > saldo ──────────────────
+
+describe("crédito com fornecedor", () => {
+  it("pagamento igual ao saldo → saldo = 0, crédito = 0", () => {
+    const valorPagar = 100_000;
+    const totalPago = 100_000;
+    const saldoLiquido = valorPagar - totalPago;
+    expect(Math.max(0, saldoLiquido)).toBe(0);
+    expect(Math.max(0, -saldoLiquido)).toBe(0);
+  });
+
+  it("pagamento superior ao saldo → crédito positivo", () => {
+    const valorPagar = 100_000;
+    const totalPago = 110_000;
+    const saldoLiquido = valorPagar - totalPago; // -10.000
+    const saldoPendente = Math.max(0, saldoLiquido);
+    const creditoFornecedor = Math.max(0, -saldoLiquido);
+    expect(saldoPendente).toBe(0);
+    expect(creditoFornecedor).toBe(10_000);
+  });
+});

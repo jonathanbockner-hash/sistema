@@ -74,3 +74,8 @@
 
 ## Bugs v5
 - [x] Bug: Lançamento de Descarga — formulário inline não funciona corretamente, reescrever com modal/drawer
+
+## Bugs críticos v6
+- [x] Bug: Pagamento superior ao saldo não gera crédito com fornecedor no dashboard
+- [x] Bug: Desconto de classificação aplicado mesmo dentro da tolerância do contrato
+- [x] Bug: Relatório com peso balança errado, valor pago não exibido, descontos indevidos de classificação
