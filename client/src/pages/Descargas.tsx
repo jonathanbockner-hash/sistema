@@ -34,13 +34,18 @@ export default function Descargas() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const ticketRef = useRef<HTMLInputElement>(null);
 
-  const { data: embarques = [], refetch: refetchEmbarques } = trpc.embarques.list.useQuery({});
+  // Busca TODOS os embarques sem descarga finalizada (inclui Em trânsito e Descarga pendente)
+  const { data: embarquesSemDescarga = [], refetch: refetchEmbarques } = trpc.embarques.listSemDescarga.useQuery(
+    filtroOp ? { operacaoId: filtroOp as number } : {}
+  );
+  // Também busca todos para o preview de cálculo
+  const { data: todosEmbarques = [] } = trpc.embarques.list.useQuery({});
   const { data: operacoes = [] } = trpc.operacoes.list.useQuery();
   const { data: compras = [] } = trpc.compras.list.useQuery();
   const { data: vendas = [] } = trpc.vendas.list.useQuery();
   const { data: cfg } = trpc.config.get.useQuery();
 
-  const { data: descargaExistente } = trpc.descargas.getByEmbarque.useQuery(
+  const { data: descargaExistente, isLoading: loadingDescarga } = trpc.descargas.getByEmbarque.useQuery(
     { embarqueId: selectedEmbarqueId ?? 0 },
     { enabled: (selectedEmbarqueId ?? 0) > 0 }
   );
@@ -66,18 +71,15 @@ export default function Descargas() {
     if (errors[k]) setErrors(prev => { const nx = { ...prev }; delete nx[k]; return nx; });
   };
 
-  // Embarques em aberto (sem descarga finalizada)
-  const embarquesAbertos = embarques.filter(e => e.status !== "Finalizada");
-  const embarquesFiltrados = filtroOp
-    ? embarquesAbertos.filter(e => e.operacaoId === filtroOp)
-    : embarquesAbertos;
+  // Usa diretamente os embarques sem descarga retornados pelo backend
+  const embarquesFiltrados = embarquesSemDescarga;
 
-  const selectedEmbarque = embarques.find(e => e.id === selectedEmbarqueId);
+  const selectedEmbarque = todosEmbarques.find(e => e.id === selectedEmbarqueId) ?? embarquesSemDescarga.find(e => e.id === selectedEmbarqueId);
   const selectedOp = operacoes.find(o => o.id === selectedEmbarque?.operacaoId);
   const selectedCompra = compras.find(c => c.id === selectedOp?.compraId);
   const selectedVenda = vendas.find(v => v.id === selectedOp?.vendaId);
 
-  function handleOpenSheet(em: typeof embarques[0]) {
+  function handleOpenSheet(em: typeof embarquesSemDescarga[0]) {
     setSelectedEmbarqueId(em.id);
     // Pré-preenche com dados do embarque
     setForm({
@@ -255,10 +257,42 @@ export default function Descargas() {
         </div>
 
         {embarquesFiltrados.length === 0 ? (
-          <EmptyState
-            title="Nenhuma carga em aberto"
-            description={filtroOp ? "Todas as cargas desta operação foram finalizadas." : "Lance novos embarques para gerenciar as descargas."}
-          />
+          <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <div className="w-12 h-12 rounded-full bg-muted/30 flex items-center justify-center">
+              <Truck size={20} className="text-muted-foreground" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">Nenhuma carga em aberto</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {filtroOp
+                  ? "Todas as cargas desta operação foram finalizadas."
+                  : "Para lançar uma descarga, primeiro registre um embarque na tela \"Lançar Embarque\"."}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={() => window.location.href = "/embarques"}
+              >
+                Ir para Lançar Embarque
+              </Button>
+              <Button
+                size="sm"
+                className="gradient-brand text-white text-xs"
+                onClick={() => {
+                  setSelectedEmbarqueId(null);
+                  setForm({ ...defaultForm });
+                  setErrors({});
+                  setTicketStatus("idle");
+                  setSheetOpen(true);
+                }}
+              >
+                Lançar descarga avulsa
+              </Button>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -326,6 +360,44 @@ export default function Descargas() {
           </SheetHeader>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {/* Modo avulso: seleção de operação e embarque */}
+            {!selectedEmbarqueId && (
+              <FormSection title="Selecionar embarque">
+                <div className="grid grid-cols-1 gap-3">
+                  <Field label="Operação">
+                    <select
+                      className={selectCls}
+                      value={filtroOp}
+                      onChange={e => setFiltroOp(e.target.value ? Number(e.target.value) : "")}
+                    >
+                      <option value="">Selecione uma operação...</option>
+                      {operacoes.map(o => <option key={o.id} value={o.id}>{o.sigla}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Embarque" required>
+                    <select
+                      className={selectCls}
+                      value={form.embarqueId || ""}
+                      onChange={e => {
+                        const id = Number(e.target.value);
+                        const em = todosEmbarques.find(x => x.id === id) ?? embarquesSemDescarga.find(x => x.id === id);
+                        if (em) {
+                          setSelectedEmbarqueId(id);
+                          setForm(f => ({ ...f, embarqueId: id, placa: em.placa ?? "", nfeSaida: em.nfeSaida ?? "" }));
+                        }
+                      }}
+                    >
+                      <option value="">Selecione um embarque...</option>
+                      {(filtroOp ? todosEmbarques.filter(e => e.operacaoId === filtroOp) : todosEmbarques).map(e => {
+                        const op = operacoes.find(o => o.id === e.operacaoId);
+                        return <option key={e.id} value={e.id}>{op?.sigla} — {e.placa || "sem placa"} — {e.nfeSaida || "sem NF"}</option>;
+                      })}
+                    </select>
+                  </Field>
+                </div>
+              </FormSection>
+            )}
+
             {/* Dados do embarque (referência) */}
             {selectedEmbarque && (
               <div className="rounded-lg bg-muted/20 border border-border/50 p-3 grid grid-cols-3 gap-3 text-xs">
