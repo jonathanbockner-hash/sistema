@@ -129,3 +129,10 @@
 - [x] Status pago/aberto na tabela de Despesas Operacionais (badge verde/vermelho)
 - [x] Migration: sincronizar colunas pago/dataBaixa/comprovanteTexto no arquivo SQL
 - [x] Valor calculado automaticamente para Comissão e Classificador ao selecionar operação
+
+## Baixa Consolidada Global v2
+- [ ] Refatorar procedure `despesas.saldoConsolidado`: agrupa despesas em aberto por favorecido+categoria, retorna saldo total por grupo
+- [ ] Refatorar procedure `despesas.lerComprovante`: retorna favorecido+valor extraído pelo LLM para cruzar com saldos consolidados
+- [ ] Criar procedure `despesas.darBaixaConsolidada`: recebe favorecido+categoria+operacaoId+valor+comprovante, marca todas as despesas em aberto daquele grupo como pagas até cobrir o valor
+- [ ] Reescrever tela BaixaDespesas.tsx: painel de saldos em aberto por favorecido/categoria, upload de comprovante, leitura IA, vinculação ao saldo do favorecido reconhecido, confirmação e baixa
+- [ ] Remover fluxo nota a nota (seleção individual de despesa)

@@ -485,3 +485,102 @@ export async function darBaixaDespesa(data: {
     updatedAt: new Date(),
   }).where(eq(despesasOperacionais.id, data.id));
 }
+
+/** Retorna saldo consolidado de despesas em aberto por favorecido+categoria para uma operação */
+export async function saldoConsolidadoDespesas(operacaoId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const todas = await db.select().from(despesasOperacionais)
+    .where(eq(despesasOperacionais.operacaoId, operacaoId))
+    .orderBy(despesasOperacionais.categoria, despesasOperacionais.favorecido);
+
+  // Agrupa por favorecido+categoria
+  const mapa = new Map<string, {
+    chave: string;
+    categoria: string;
+    favorecido: string;
+    totalLancado: number;
+    totalPago: number;
+    saldoAberto: number;
+    ids: number[];
+    idsAbertos: number[];
+    ultimaData: string | null;
+  }>();
+
+  for (const d of todas) {
+    const chave = `${d.categoria}::${d.favorecido.toLowerCase().trim()}`;
+    if (!mapa.has(chave)) {
+      mapa.set(chave, {
+        chave,
+        categoria: d.categoria,
+        favorecido: d.favorecido,
+        totalLancado: 0,
+        totalPago: 0,
+        saldoAberto: 0,
+        ids: [],
+        idsAbertos: [],
+        ultimaData: null,
+      });
+    }
+    const grupo = mapa.get(chave)!;
+    const valor = parseFloat(String(d.valor));
+    grupo.totalLancado += valor;
+    grupo.ids.push(d.id);
+    if (d.pago) {
+      grupo.totalPago += valor;
+    } else {
+      grupo.saldoAberto += valor;
+      grupo.idsAbertos.push(d.id);
+    }
+    const dataBaixaStr = d.dataBaixa ? String(d.dataBaixa).slice(0, 10) : null;
+    if (dataBaixaStr && (!grupo.ultimaData || dataBaixaStr > grupo.ultimaData)) {
+      grupo.ultimaData = dataBaixaStr;
+    }
+  }
+
+  return Array.from(mapa.values()).sort((a, b) => b.saldoAberto - a.saldoAberto);
+}
+
+/** Dá baixa consolidada em todas as despesas em aberto de um grupo (favorecido+categoria) */
+export async function darBaixaConsolidada(data: {
+  operacaoId: number;
+  categoria: string;
+  favorecido: string;
+  dataBaixa: string;
+  comprovanteUrl?: string | null;
+  comprovanteTexto?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) return { baixadas: 0 };
+
+  // Busca todas as despesas em aberto do grupo
+  const abertas = await db.select().from(despesasOperacionais).where(
+    and(
+      eq(despesasOperacionais.operacaoId, data.operacaoId),
+      eq(despesasOperacionais.categoria, data.categoria as any),
+      eq(despesasOperacionais.pago, false),
+    )
+  );
+
+  // Filtra pelo favorecido (normalizado)
+  const normFav = data.favorecido.toLowerCase().trim();
+  const doGrupo = abertas.filter(d =>
+    d.favorecido.toLowerCase().trim() === normFav
+  );
+
+  if (doGrupo.length === 0) return { baixadas: 0 };
+
+  // Atualiza todas como pagas
+  const ids = doGrupo.map(d => d.id);
+  for (const id of ids) {
+    await db.update(despesasOperacionais).set({
+      pago: true,
+      dataBaixa: new Date(data.dataBaixa),
+      comprovanteUrl: data.comprovanteUrl ?? null,
+      comprovanteTexto: data.comprovanteTexto ?? null,
+      updatedAt: new Date(),
+    }).where(eq(despesasOperacionais.id, id));
+  }
+
+  return { baixadas: ids.length };
+}

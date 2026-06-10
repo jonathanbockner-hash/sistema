@@ -17,6 +17,7 @@ import {
   getDescargaByEmbarque, upsertDescarga, listDescargas,
   listPagamentos, upsertPagamento, deletePagamento,
   listDespesas, upsertDespesa, deleteDespesa, darBaixaDespesa,
+  saldoConsolidadoDespesas, darBaixaConsolidada,
 } from "./db";
 
 const classifSchema = z.object({
@@ -488,10 +489,17 @@ export const appRouter = router({
       return { comprovanteUrl: url };
     }),
 
+  /** Retorna saldo consolidado de despesas em aberto por favorecido+categoria */
+  saldoConsolidado: protectedProcedure
+    .input(z.object({ operacaoId: z.number() }))
+    .query(async ({ input }) => {
+      return saldoConsolidadoDespesas(input.operacaoId);
+    }),
+
   /**
-   * Recebe um comprovante (base64) + lista de despesas em aberto da operação.
+   * Recebe um comprovante (base64) + operacaoId.
    * Usa LLM para extrair: favorecido, valor, data, forma de pagamento.
-   * Cruza com as despesas em aberto e retorna sugestões de vinculação.
+   * Cruza com os SALDOS CONSOLIDADOS em aberto e retorna sugestões de vinculação.
    */
   lerComprovante: protectedProcedure
     .input(z.object({
@@ -505,9 +513,9 @@ export const appRouter = router({
       const key = `despesas-comprovantes/${Date.now()}.${input.mimeType.includes("pdf") ? "pdf" : "jpg"}`;
       const { url: comprovanteUrl } = await storagePut(key, buf, input.mimeType);
 
-      // 2. Buscar despesas em aberto da operação + dados da operação (corretor/classificador)
-      const despesasAbertas = await listDespesas(input.operacaoId);
-      const abertas = despesasAbertas.filter((d: any) => !d.pago);
+      // 2. Buscar saldos consolidados em aberto + dados da operação
+      const saldos = await saldoConsolidadoDespesas(input.operacaoId);
+      const saldosAbertos = saldos.filter(s => s.saldoAberto > 0);
       const op = await getOperacao(input.operacaoId);
       const corretorOp = op?.corretorId ? await getCorretor(op.corretorId) : null;
       const classificadorOp = op?.classificadorId ? await getClassificador(op.classificadorId) : null;
@@ -539,10 +547,8 @@ export const appRouter = router({
         return { comprovanteUrl, leitura: null, sugestoes: [] };
       }
 
-      // 4. Palavras-chave de transporte/logística para categoria frete
-      const PALAVRAS_FRETE = ["transport", "logística", "log", "frete", "carga", "caminhao", "caminhão", "carreta", "express", "cargo"];
-
-      // 5. Função de similaridade simples (normaliza e verifica inclusão)
+      // 4. Funções de matching
+      const PALAVRAS_FRETE = ["transport", "logistica", "log", "frete", "carga", "caminhao", "carreta", "express", "cargo"];
       function normalizar(s: string) {
         return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").trim();
       }
@@ -559,63 +565,61 @@ export const appRouter = router({
       const favComp = leitura.favorecido;
       const palavrasComp = [...(leitura.palavrasChave ?? []), favComp].map(normalizar);
 
-      // 6. Para cada despesa aberta, calcular score de match
-      const sugestoes = abertas.map((d: any) => {
-        let matchScore = score(favComp, d.favorecido);
+      // 5. Para cada SALDO CONSOLIDADO em aberto, calcular score de match
+      const sugestoes = saldosAbertos.map(s => {
+        let matchScore = score(favComp, s.favorecido);
 
-        // Bonus extra: cruzar com nome do corretor/classificador cadastrado na operação
-        if (d.categoria === "comissao" && corretorOp) {
+        // Bonus: cruzar com nome do corretor/classificador cadastrado na operação
+        if (s.categoria === "comissao" && corretorOp) {
           matchScore = Math.max(matchScore, score(favComp, corretorOp.nome));
         }
-        if (d.categoria === "classificador" && classificadorOp) {
+        if (s.categoria === "classificador" && classificadorOp) {
           matchScore = Math.max(matchScore, score(favComp, classificadorOp.nome));
         }
-
-        // Bonus: se categoria é frete e palavras do comprovante têm palavras de transporte
-        if (d.categoria === "frete" && PALAVRAS_FRETE.some(p => palavrasComp.some(pc => pc.includes(p)))) {
+        // Bonus: palavras de transporte para categoria frete
+        if (s.categoria === "frete" && PALAVRAS_FRETE.some(p => palavrasComp.some(pc => pc.includes(p)))) {
           matchScore = Math.max(matchScore, 0.7);
         }
-
-        // Bonus: valor muito próximo (dentro de 1%)
+        // Bonus: valor do comprovante próximo do saldo em aberto (dentro de 5%)
         const valorComp = leitura!.valor;
-        const valorDesp = parseFloat(d.valor);
-        if (valorComp > 0 && valorDesp > 0) {
-          const diff = Math.abs(valorComp - valorDesp) / valorDesp;
-          if (diff < 0.01) matchScore = Math.min(1.0, matchScore + 0.2);
-          else if (diff < 0.05) matchScore = Math.min(1.0, matchScore + 0.1);
+        if (valorComp > 0 && s.saldoAberto > 0) {
+          const diff = Math.abs(valorComp - s.saldoAberto) / s.saldoAberto;
+          if (diff < 0.01) matchScore = Math.min(1.0, matchScore + 0.25);
+          else if (diff < 0.05) matchScore = Math.min(1.0, matchScore + 0.15);
+          else if (diff < 0.15) matchScore = Math.min(1.0, matchScore + 0.05);
         }
 
         return {
-          despesaId: d.id,
-          categoria: d.categoria,
-          favorecido: d.favorecido,
-          valor: d.valor,
+          chave: s.chave,
+          categoria: s.categoria,
+          favorecido: s.favorecido,
+          totalLancado: s.totalLancado,
+          totalPago: s.totalPago,
+          saldoAberto: s.saldoAberto,
           matchScore: Math.round(matchScore * 100),
-          autoVincular: matchScore >= 0.7,
+          autoVincular: matchScore >= 0.65,
         };
-      }).sort((a: any, b: any) => b.matchScore - a.matchScore);
+      }).sort((a, b) => b.matchScore - a.matchScore);
 
       return { comprovanteUrl, leitura, sugestoes };
     }),
 
   /**
-   * Confirma a baixa de uma ou mais despesas com o comprovante já processado.
+   * Dá baixa consolidada em TODAS as despesas em aberto de um grupo (favorecido+categoria).
+   * Um único comprovante quita tudo que está em aberto para aquele favorecido.
    */
-  darBaixa: protectedProcedure
+  darBaixaConsolidada: protectedProcedure
     .input(z.object({
-      despesaId: z.number(),
+      operacaoId: z.number(),
+      categoria: z.enum(["comissao","fethab","iagro","senar","funrural","classificador","frete","outro"]),
+      favorecido: z.string(),
       dataBaixa: z.string(),
       comprovanteUrl: z.string().optional(),
       comprovanteTexto: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      await darBaixaDespesa({
-        id: input.despesaId,
-        dataBaixa: input.dataBaixa,
-        comprovanteUrl: input.comprovanteUrl,
-        comprovanteTexto: input.comprovanteTexto,
-      });
-      return { ok: true };
+      const result = await darBaixaConsolidada(input);
+      return result;
     }),
   }),
 });

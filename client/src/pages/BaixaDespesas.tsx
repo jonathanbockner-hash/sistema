@@ -1,22 +1,20 @@
 import { useState, useRef } from "react";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Upload, FileText, CheckCircle, XCircle, Loader2, AlertTriangle, Sparkles, Link2 } from "lucide-react";
+import {
+  Upload, Loader2, Sparkles, CheckCircle, AlertTriangle,
+  FileText, Link2, DollarSign, Clock,
+} from "lucide-react";
 
 const CAT_LABELS: Record<string, string> = {
-  comissao: "Comissão",
-  fethab: "FETHAB",
-  iagro: "IAGRO",
-  senar: "SENAR",
-  funrural: "FUNRURAL",
-  classificador: "Classificador",
-  frete: "Frete",
-  outro: "Outro",
+  comissao: "Comissão", fethab: "FETHAB", iagro: "IAGRO",
+  senar: "SENAR", funrural: "FUNRURAL", classificador: "Classificador",
+  frete: "Frete", outro: "Outro",
 };
 
 function fmtMoeda(v: number | string) {
@@ -24,61 +22,48 @@ function fmtMoeda(v: number | string) {
 }
 
 export default function BaixaDespesas() {
-  const { data: operacoes = [] } = trpc.operacoes.list.useQuery();
   const [operacaoId, setOperacaoId] = useState<number | null>(null);
-  const { data: despesas = [], refetch: refetchDespesas } = trpc.despesas.list.useQuery(
-    { operacaoId: operacaoId ?? undefined },
+  const [fileBase64, setFileBase64] = useState("");
+  const [fileMime, setFileMime] = useState("image/jpeg");
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [lendo, setLendo] = useState(false);
+  const [comprovanteUrl, setComprovanteUrl] = useState<string | null>(null);
+  const [leitura, setLeitura] = useState<any>(null);
+  const [sugestoes, setSugestoes] = useState<any[]>([]);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set()); // chave = "categoria::favorecido"
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const { data: operacoes = [] } = trpc.operacoes.list.useQuery();
+  const { data: saldos = [], refetch: refetchSaldos } = trpc.despesas.saldoConsolidado.useQuery(
+    { operacaoId: operacaoId! },
     { enabled: !!operacaoId }
   );
 
-  const despesasAbertas = (despesas as any[]).filter((d) => !d.pago);
-  const despesasPagas = (despesas as any[]).filter((d) => d.pago);
-
-  // Upload e leitura
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [fileMime, setFileMime] = useState<string>("");
-  const [fileBase64, setFileBase64] = useState<string>("");
-  const [lendo, setLendo] = useState(false);
-
-  // Resultado da leitura LLM
-  const [leitura, setLeitura] = useState<{
-    favorecido: string; valor: number; data: string;
-    formaPagamento: string; banco: string; textoCompleto: string;
-  } | null>(null);
-  const [sugestoes, setSugestoes] = useState<{
-    despesaId: number; categoria: string; favorecido: string;
-    valor: string; matchScore: number; autoVincular: boolean;
-  }[]>([]);
-  const [comprovanteUrl, setComprovanteUrl] = useState<string | null>(null);
-
-  // Seleção de vínculos
-  const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
-
   const lerComprovanteMut = trpc.despesas.lerComprovante.useMutation();
-  const darBaixaMut = trpc.despesas.darBaixa.useMutation();
+  const darBaixaMut = trpc.despesas.darBaixaConsolidada.useMutation();
+
+  const saldosAbertos = (saldos as any[]).filter((s: any) => s.saldoAberto > 0);
+  const saldosPagos = (saldos as any[]).filter((s: any) => s.saldoAberto === 0 && s.totalPago > 0);
+  const totalAberto = saldosAbertos.reduce((acc: number, s: any) => acc + s.saldoAberto, 0);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileMime(file.type || "image/jpeg");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      const base64 = result.split(",")[1];
+      setFileBase64(base64);
+      if (file.type.startsWith("image/")) setFilePreview(result);
+      else setFilePreview(null);
+    };
+    reader.readAsDataURL(file);
+    // Limpar resultado anterior
     setLeitura(null);
     setSugestoes([]);
     setSelecionados(new Set());
     setComprovanteUrl(null);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      // result = "data:image/png;base64,XXXX"
-      const base64 = result.split(",")[1];
-      setFileBase64(base64);
-      setFileMime(file.type);
-      if (file.type.startsWith("image/")) {
-        setFilePreview(result);
-      } else {
-        setFilePreview(null);
-      }
-    };
-    reader.readAsDataURL(file);
   }
 
   async function handleLer() {
@@ -97,8 +82,10 @@ export default function BaixaDespesas() {
       setLeitura(res.leitura as any);
       setSugestoes(res.sugestoes as any);
       // Pré-selecionar os que têm autoVincular
-      const autoIds = new Set((res.sugestoes as any[]).filter((s) => s.autoVincular).map((s) => s.despesaId));
-      setSelecionados(autoIds);
+      const autoChaves = new Set(
+        (res.sugestoes as any[]).filter((s) => s.autoVincular).map((s) => s.chave)
+      );
+      setSelecionados(autoChaves);
       if (!res.leitura) {
         toast.warning("Não foi possível extrair dados do comprovante. Verifique o arquivo.");
       } else {
@@ -111,45 +98,51 @@ export default function BaixaDespesas() {
     }
   }
 
-  function toggleSelecionado(id: number) {
+  function toggleSelecionado(chave: string) {
     setSelecionados((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(chave)) next.delete(chave);
+      else next.add(chave);
       return next;
     });
   }
 
   async function handleConfirmarBaixa() {
     if (selecionados.size === 0) {
-      toast.error("Selecione ao menos uma despesa para dar baixa.");
+      toast.error("Selecione ao menos um saldo para dar baixa.");
       return;
     }
     const dataBaixa = leitura?.data ?? new Date().toISOString().slice(0, 10);
     const textoCompleto = leitura?.textoCompleto ?? null;
     let ok = 0;
-    for (const id of Array.from(selecionados)) {
+
+    for (const chave of Array.from(selecionados)) {
+      // Encontrar o saldo correspondente
+      const saldo = sugestoes.find((s: any) => s.chave === chave);
+      if (!saldo) continue;
       try {
-        await darBaixaMut.mutateAsync({
-          despesaId: id,
+        const result = await darBaixaMut.mutateAsync({
+          operacaoId: operacaoId!,
+          categoria: saldo.categoria,
+          favorecido: saldo.favorecido,
           dataBaixa,
           comprovanteUrl: comprovanteUrl ?? undefined,
           comprovanteTexto: textoCompleto ?? undefined,
         });
-        ok++;
+        ok += (result as any).baixadas ?? 1;
       } catch (err: any) {
-        toast.error(`Erro ao dar baixa na despesa #${id}: ${err?.message}`);
+        toast.error(`Erro ao dar baixa em ${CAT_LABELS[saldo.categoria] ?? saldo.categoria} — ${saldo.favorecido}: ${err?.message}`);
       }
     }
+
     if (ok > 0) {
-      toast.success(`${ok} despesa(s) baixada(s) com sucesso!`);
-      refetchDespesas();
-      // Limpar estado
+      toast.success(`Baixa confirmada! ${ok} lançamento(s) quitado(s).`);
+      refetchSaldos();
       setLeitura(null);
       setSugestoes([]);
       setSelecionados(new Set());
       setFileBase64("");
-      setFileMime("");
+      setFileMime("image/jpeg");
       setFilePreview(null);
       setComprovanteUrl(null);
       if (fileRef.current) fileRef.current.value = "";
@@ -162,27 +155,21 @@ export default function BaixaDespesas() {
     return "text-red-400";
   };
 
-  const scoreBadge = (score: number) => {
-    if (score >= 80) return "default";
-    if (score >= 50) return "secondary";
-    return "destructive";
-  };
-
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold">Baixa de Despesas por Comprovante</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Faça upload do comprovante de pagamento. O sistema lê os dados automaticamente e sugere a vinculação com as despesas em aberto.
+          Selecione a operação, faça upload do comprovante e o sistema reconhece o favorecido e quita o saldo em aberto automaticamente.
         </p>
       </div>
 
-      {/* Seleção de operação */}
+      {/* 1. Seleção de operação */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">1. Selecione a Operação</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <Select
             value={operacaoId ? String(operacaoId) : ""}
             onValueChange={(v) => {
@@ -190,6 +177,8 @@ export default function BaixaDespesas() {
               setLeitura(null);
               setSugestoes([]);
               setSelecionados(new Set());
+              setFileBase64("");
+              setFilePreview(null);
             }}
           >
             <SelectTrigger className="w-full max-w-md">
@@ -204,29 +193,47 @@ export default function BaixaDespesas() {
             </SelectContent>
           </Select>
 
-          {operacaoId && (
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Despesas em aberto</p>
-                <p className="text-2xl font-bold text-orange-400">{despesasAbertas.length}</p>
-                <p className="text-xs text-muted-foreground">
-                  {fmtMoeda(despesasAbertas.reduce((s: number, d: any) => s + Number(d.valor), 0))}
-                </p>
+          {/* Painel de saldos em aberto */}
+          {operacaoId && saldosAbertos.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">
+                Saldos em aberto — {fmtMoeda(totalAberto)} total
+              </p>
+              <div className="grid gap-2">
+                {saldosAbertos.map((s: any) => (
+                  <div key={s.chave} className="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+                    <div className="flex items-center gap-3">
+                      <Clock className="h-4 w-4 text-red-400 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">{s.favorecido}</p>
+                        <p className="text-xs text-muted-foreground">{CAT_LABELS[s.categoria] ?? s.categoria}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-red-400">{fmtMoeda(s.saldoAberto)}</p>
+                      {s.totalPago > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Pago: {fmtMoeda(s.totalPago)} / Total: {fmtMoeda(s.totalLancado)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Despesas pagas</p>
-                <p className="text-2xl font-bold text-emerald-400">{despesasPagas.length}</p>
-                <p className="text-xs text-muted-foreground">
-                  {fmtMoeda(despesasPagas.reduce((s: number, d: any) => s + Number(d.valor), 0))}
-                </p>
-              </div>
+            </div>
+          )}
+
+          {operacaoId && saldosAbertos.length === 0 && (
+            <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+              <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+              <p className="text-sm text-emerald-300">Todas as despesas desta operação estão quitadas.</p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Upload do comprovante */}
-      {operacaoId && (
+      {/* 2. Upload do comprovante */}
+      {operacaoId && saldosAbertos.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">2. Upload do Comprovante</CardTitle>
@@ -272,23 +279,24 @@ export default function BaixaDespesas() {
         </Card>
       )}
 
-      {/* Resultado da leitura */}
+      {/* 3. Resultado da leitura e vinculação consolidada */}
       {leitura && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              3. Dados Extraídos pelo Sistema
+              3. Dados Extraídos — Confirme a Vinculação
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Dados do comprovante */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg">
               <div>
-                <p className="text-xs text-muted-foreground">Favorecido</p>
+                <p className="text-xs text-muted-foreground">Favorecido reconhecido</p>
                 <p className="font-semibold text-sm">{leitura.favorecido}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Valor</p>
+                <p className="text-xs text-muted-foreground">Valor no comprovante</p>
                 <p className="font-semibold text-sm">{fmtMoeda(leitura.valor)}</p>
               </div>
               <div>
@@ -312,32 +320,29 @@ export default function BaixaDespesas() {
 
             <Separator />
 
-            {/* Sugestões de vinculação */}
+            {/* Saldos sugeridos para baixa */}
             <div>
               <p className="text-sm font-medium mb-3 flex items-center gap-2">
                 <Link2 className="h-4 w-4" />
-                Despesas sugeridas para vinculação
-                <span className="text-xs text-muted-foreground font-normal">
-                  (marque as que deseja dar baixa)
-                </span>
+                Saldos em aberto — selecione os que este comprovante quita
               </p>
 
               {sugestoes.length === 0 ? (
                 <div className="flex items-center gap-2 p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
                   <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
                   <p className="text-sm text-orange-300">
-                    Nenhuma despesa em aberto encontrada para esta operação. Cadastre as despesas primeiro em "Despesas Operacionais".
+                    Nenhum saldo em aberto encontrado. Cadastre as despesas em "Despesas Operacionais" primeiro.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {sugestoes.map((s) => {
-                    const sel = selecionados.has(s.despesaId);
+                  {sugestoes.map((s: any) => {
+                    const sel = selecionados.has(s.chave);
                     return (
                       <div
-                        key={s.despesaId}
-                        onClick={() => toggleSelecionado(s.despesaId)}
-                        className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+                        key={s.chave}
+                        onClick={() => toggleSelecionado(s.chave)}
+                        className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${
                           sel
                             ? "border-emerald-500/50 bg-emerald-500/10"
                             : "border-border hover:border-border/80 bg-muted/10"
@@ -352,19 +357,23 @@ export default function BaixaDespesas() {
                           <div>
                             <p className="text-sm font-medium">{s.favorecido}</p>
                             <p className="text-xs text-muted-foreground">
-                              {CAT_LABELS[s.categoria] ?? s.categoria} · {fmtMoeda(s.valor)}
+                              {CAT_LABELS[s.categoria] ?? s.categoria}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {s.autoVincular && (
-                            <Badge variant="default" className="text-xs bg-emerald-600">
-                              Auto
-                            </Badge>
-                          )}
-                          <Badge variant={scoreBadge(s.matchScore) as any} className="text-xs">
-                            <span className={scoreColor(s.matchScore)}>{s.matchScore}%</span>
-                          </Badge>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-red-400">{fmtMoeda(s.saldoAberto)}</p>
+                            <p className="text-xs text-muted-foreground">saldo em aberto</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            {s.autoVincular && (
+                              <Badge variant="default" className="text-xs bg-emerald-600">Auto</Badge>
+                            )}
+                            <span className={`text-xs font-semibold ${scoreColor(s.matchScore)}`}>
+                              {s.matchScore}% match
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -374,80 +383,63 @@ export default function BaixaDespesas() {
             </div>
 
             {sugestoes.length > 0 && (
-              <Button
-                onClick={handleConfirmarBaixa}
-                disabled={selecionados.size === 0 || darBaixaMut.isPending}
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
-              >
-                {darBaixaMut.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirmando baixa...</>
-                ) : (
-                  <><CheckCircle className="h-4 w-4 mr-2" />Confirmar Baixa de {selecionados.size} Despesa(s)</>
+              <>
+                {selecionados.size > 0 && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-emerald-400" />
+                      <p className="text-sm font-medium">
+                        Total a quitar:{" "}
+                        <span className="text-emerald-400 font-bold">
+                          {fmtMoeda(
+                            sugestoes
+                              .filter((s: any) => selecionados.has(s.chave))
+                              .reduce((acc: number, s: any) => acc + s.saldoAberto, 0)
+                          )}
+                        </span>
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{selecionados.size} grupo(s) selecionado(s)</p>
+                  </div>
                 )}
-              </Button>
+
+                <Button
+                  onClick={handleConfirmarBaixa}
+                  disabled={selecionados.size === 0 || darBaixaMut.isPending}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {darBaixaMut.isPending ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirmando baixa...</>
+                  ) : (
+                    <><CheckCircle className="h-4 w-4 mr-2" />Confirmar Baixa — {selecionados.size} Grupo(s)</>
+                  )}
+                </Button>
+              </>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Lista de despesas em aberto */}
-      {operacaoId && despesasAbertas.length > 0 && !leitura && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-orange-400" />
-              Despesas em Aberto
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {despesasAbertas.map((d: any) => (
-                <div key={d.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-border">
-                  <div>
-                    <p className="text-sm font-medium">{d.favorecido}</p>
-                    <p className="text-xs text-muted-foreground">{CAT_LABELS[d.categoria] ?? d.categoria}</p>
-                  </div>
-                  <p className="text-sm font-semibold text-orange-400">{fmtMoeda(d.valor)}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Lista de despesas já pagas */}
-      {operacaoId && despesasPagas.length > 0 && (
+      {/* Histórico de saldos já quitados */}
+      {operacaoId && saldosPagos.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <CheckCircle className="h-4 w-4 text-emerald-400" />
-              Despesas Já Baixadas
+              Despesas Quitadas
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {despesasPagas.map((d: any) => (
-                <div key={d.id} className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+              {saldosPagos.map((s: any) => (
+                <div key={s.chave} className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
                   <div>
-                    <p className="text-sm font-medium">{d.favorecido}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {CAT_LABELS[d.categoria] ?? d.categoria}
-                      {d.dataBaixa && ` · Baixado em ${new Date(d.dataBaixa).toLocaleDateString("pt-BR")}`}
-                    </p>
-                    {d.comprovanteUrl && (
-                      <a
-                        href={d.comprovanteUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline"
-                      >
-                        Ver comprovante
-                      </a>
-                    )}
+                    <p className="text-sm font-medium">{s.favorecido}</p>
+                    <p className="text-xs text-muted-foreground">{CAT_LABELS[s.categoria] ?? s.categoria}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold text-emerald-400">{fmtMoeda(d.valor)}</p>
-                    <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400">Pago</Badge>
+                    <p className="text-sm font-semibold text-emerald-400">{fmtMoeda(s.totalPago)}</p>
+                    <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400">Quitado</Badge>
                   </div>
                 </div>
               ))}
