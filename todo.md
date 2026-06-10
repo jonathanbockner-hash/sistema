@@ -92,3 +92,6 @@
 
 ## Bug v7.1 — Baixa automática na descarga
 - [x] Bug: Modo avulso em Descargas.tsx usava `todosEmbarques` (incluindo finalizados) no select de embarque — após salvar descarga, o caminhão continuava aparecendo na lista para novo lançamento. Corrigido para usar `embarquesSemDescargaTodos` (query sem filtro de operação, mas excluindo status Finalizada) e refetch desta query no onSuccess.
+
+## Bug v7.2 — Select avulso mostrava embarques já descarregados
+- [x] Bug: listEmbarquesSemDescarga filtrava apenas por status != Finalizada, mas embarques com descarga registrada podiam ter status desatualizado. Corrigido para usar NOT EXISTS na tabela descargas — agora só aparecem embarques sem nenhum registro de descarga vinculado.

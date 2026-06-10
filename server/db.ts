@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, lte, isNull, ne } from "drizzle-orm";
+import { eq, desc, and, gte, lte, isNull, ne, notExists, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, config, classificadores, corretores,
@@ -292,11 +292,19 @@ export async function listEmbarques(filters?: { operacaoId?: number; dataIni?: D
     : db.select().from(embarques).orderBy(desc(embarques.createdAt));
 }
 
-/** Embarques sem descarga lançada (status Em trânsito ou Descarga pendente) */
+/** Embarques sem descarga lançada — filtra por ausência real de registro na tabela descargas
+ *  (dupla garantia: status != Finalizada E não existe descarga vinculada)
+ */
 export async function listEmbarquesSemDescarga(operacaoId?: number) {
   const db = await getDb();
   if (!db) return [];
-  const conditions: any[] = [ne(embarques.status, 'Finalizada' as any)];
+  // Subquery: embarques que já têm descarga registrada
+  const semDescarga = notExists(
+    db.select({ id: descargas.embarqueId })
+      .from(descargas)
+      .where(eq(descargas.embarqueId, embarques.id))
+  );
+  const conditions: any[] = [semDescarga];
   if (operacaoId) conditions.push(eq(embarques.operacaoId, operacaoId));
   return db.select().from(embarques).where(and(...conditions)).orderBy(desc(embarques.dataEmbarque));
 }
