@@ -41,26 +41,29 @@ export default function Pagamentos() {
     if (!file) return;
     setUploadingComp(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        const result = await extractComp.mutateAsync({ base64, mimeType: file.type });
-        if (result) {
-          if (result.valor) set("valor", result.valor);
-          if (result.dataPagamento) set("dataPagamento", result.dataPagamento);
-          if (result.formaPagamento) set("formaPagamento", result.formaPagamento);
-          if (result.numeroBoleto) set("numeroBoleto", result.numeroBoleto);
-          if (result.chavePix) set("chavePix", result.chavePix);
-          if (result.banco) set("banco", result.banco);
-          if (result.obs) set("obs", result.obs);
-          if (result.comprovanteUrl) set("comprovanteUrl", result.comprovanteUrl);
-          toast.success("Comprovante lido com sucesso!");
-        }
-        setUploadingComp(false);
-      };
-      reader.readAsDataURL(file);
-    } catch {
-      toast.error("Erro ao processar o comprovante.");
+      // Usar arrayBuffer + btoa para garantir tratamento correto de erros assíncronos
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+      const mimeType = file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+
+      const result = await extractComp.mutateAsync({ base64, mimeType });
+      if (result) {
+        if (result.valor) set("valor", result.valor);
+        if (result.dataPagamento) set("dataPagamento", result.dataPagamento);
+        if (result.formaPagamento) set("formaPagamento", result.formaPagamento);
+        if (result.numeroBoleto) set("numeroBoleto", result.numeroBoleto);
+        if (result.chavePix) set("chavePix", result.chavePix);
+        if (result.banco) set("banco", result.banco);
+        if (result.obs) set("obs", result.obs);
+        if (result.comprovanteUrl) set("comprovanteUrl", result.comprovanteUrl);
+        toast.success("Comprovante lido com sucesso!");
+      }
+    } catch (err: any) {
+      toast.error(`Erro ao processar o comprovante: ${err?.message ?? "tente novamente"}`);
+    } finally {
       setUploadingComp(false);
     }
   }
@@ -98,7 +101,9 @@ export default function Pagamentos() {
         {compras.map(c => {
           const total = calcValorTotalCompra(c.id);
           const pago = calcTotalPago(c.id);
-          const saldo = Math.max(0, total - pago);
+          const saldoRaw = total - pago;
+          const saldo = Math.max(0, saldoRaw);
+          const temCredito = saldoRaw < -0.01;
           const perc = total > 0 ? Math.min(100, (pago / total) * 100) : 0;
           return (
             <div key={c.id} className="rounded-xl border border-border bg-card p-4">
@@ -107,8 +112,8 @@ export default function Pagamentos() {
                   <p className="text-xs font-semibold text-foreground">{c.sigla}</p>
                   <p className="text-xs text-muted-foreground">{c.fornecedor}</p>
                 </div>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${saldo > 0 ? "bg-red-500/15 text-red-400" : "bg-emerald-500/15 text-emerald-400"}`}>
-                  {saldo > 0 ? "Pendente" : "Quitado"}
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${temCredito ? "bg-emerald-500/15 text-emerald-400" : saldo > 0 ? "bg-red-500/15 text-red-400" : "bg-emerald-500/15 text-emerald-400"}`}>
+                  {temCredito ? "Crédito" : saldo > 0 ? "Pendente" : "Quitado"}
                 </span>
               </div>
               <div className="w-full h-1.5 rounded-full bg-muted/40 mb-3">
@@ -124,8 +129,17 @@ export default function Pagamentos() {
                   <span className="font-mono text-emerald-400">{brl(pago)}</span>
                 </div>
                 <div className="flex justify-between border-t border-border/50 pt-1 mt-1">
-                  <span className="text-muted-foreground font-medium">Saldo a pagar</span>
-                  <span className={`font-mono font-bold ${saldo > 0 ? "text-red-400" : "text-emerald-400"}`}>{brl(saldo)}</span>
+                  {temCredito ? (
+                    <>
+                      <span className="text-emerald-400 font-medium">Crédito c/ Fornecedor</span>
+                      <span className="font-mono font-bold text-emerald-400">{brl(Math.abs(saldoRaw))}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-muted-foreground font-medium">Saldo a pagar</span>
+                      <span className={`font-mono font-bold ${saldo > 0 ? "text-red-400" : "text-emerald-400"}`}>{brl(saldo)}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -173,13 +187,21 @@ export default function Pagamentos() {
                   if (!cc) return null;
                   const total = calcValorTotalCompra(cc.id);
                   const pago = calcTotalPago(cc.id);
-                  const saldo = Math.max(0, total - pago);
+                  const saldoRaw = total - pago;
+                  const saldo = Math.max(0, saldoRaw);
+                  const temCredito = saldoRaw < -0.01;
                   return (
                     <>
                       <div className="flex justify-between"><span className="text-muted-foreground">Banco:</span><span className="text-foreground">{cc.banco} | Ag: {cc.agencia} | Cc: {cc.conta}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Favorecido:</span><span className="text-foreground">{cc.favorecido}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">PIX:</span><span className="text-foreground font-mono">{cc.pix}</span></div>
-                      <div className="flex justify-between border-t border-border/50 pt-1 mt-1"><span className="text-muted-foreground">Saldo a pagar:</span><span className={`font-bold ${saldo > 0 ? "text-red-400" : "text-emerald-400"}`}>{brl(saldo)}</span></div>
+                      <div className="flex justify-between border-t border-border/50 pt-1 mt-1">
+                        {temCredito ? (
+                          <><span className="text-emerald-400">Crédito c/ Fornecedor:</span><span className="font-bold text-emerald-400">{brl(Math.abs(saldoRaw))}</span></>
+                        ) : (
+                          <><span className="text-muted-foreground">Saldo a pagar:</span><span className={`font-bold ${saldo > 0 ? "text-red-400" : "text-emerald-400"}`}>{brl(saldo)}</span></>
+                        )}
+                      </div>
                     </>
                   );
                 })()}

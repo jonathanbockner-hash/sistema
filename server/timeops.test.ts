@@ -328,3 +328,92 @@ describe("crédito com fornecedor", () => {
     expect(creditoFornecedor).toBe(10_000);
   });
 });
+
+// ─── Bug v7: flags de retenção por contrato de compra ────────────────────────
+
+import { calcRetencoes } from "../client/src/lib/calculos";
+
+describe("calcRetencoes — flags de retenção por contrato", () => {
+  const cfg = {
+    fethabRsTon: 48.70,
+    iagroRsTon: 2.80,
+    senarPerc: 0.20,
+    funruralPerc: 1.63,
+    fundoMes: 2.5,
+    dmais: 2,
+  };
+  const valorBruto = 50000;
+  const pesoKg = 30000; // 30 ton
+
+  it("sem flags → aplica todos os tributos (comportamento legado)", () => {
+    const r = calcRetencoes(valorBruto, pesoKg, cfg);
+    expect(r.retFethab).toBeCloseTo(30 * 48.70, 2); // 1461
+    expect(r.retIagro).toBeCloseTo(30 * 2.80, 2);   // 84
+    expect(r.retSenar).toBeCloseTo(50000 * 0.20 / 100, 2); // 100
+    expect(r.retFun).toBeCloseTo(50000 * 1.63 / 100, 2);   // 815
+  });
+
+  it("reterFethab=false → FETHAB = 0", () => {
+    const r = calcRetencoes(valorBruto, pesoKg, cfg, { reterFethab: false });
+    expect(r.retFethab).toBe(0);
+    expect(r.retFun).toBeGreaterThan(0); // outros mantidos
+  });
+
+  it("reterFunrural=false → FUNRURAL = 0", () => {
+    const r = calcRetencoes(valorBruto, pesoKg, cfg, { reterFunrural: false });
+    expect(r.retFun).toBe(0);
+    expect(r.retFethab).toBeGreaterThan(0); // outros mantidos
+  });
+
+  it("todos os flags false → retenções = 0", () => {
+    const r = calcRetencoes(valorBruto, pesoKg, cfg, {
+      reterFethab: false, reterIagro: false, reterSenar: false, reterFunrural: false,
+    });
+    expect(r.retencoes).toBe(0);
+  });
+
+  it("todos os flags true → mesmo resultado que sem flags", () => {
+    const semFlags = calcRetencoes(valorBruto, pesoKg, cfg);
+    const comFlags = calcRetencoes(valorBruto, pesoKg, cfg, {
+      reterFethab: true, reterIagro: true, reterSenar: true, reterFunrural: true,
+    });
+    expect(comFlags.retencoes).toBeCloseTo(semFlags.retencoes, 4);
+  });
+});
+
+// ─── Bug v7: contrato intraestadual p/ industrialização ──────────────────────
+
+describe("calcFinal — contrato intraestadual p/ industrialização (cenário real)", () => {
+  const cfg = {
+    fethabRsTon: 48.70,
+    iagroRsTon: 0,
+    senarPerc: 0,
+    funruralPerc: 1.63,
+    fundoMes: 2.5,
+    dmais: 2,
+  };
+
+  it("intraestadual + indústria: retenções aplicadas corretamente com flags", () => {
+    const r = calcFinal({
+      pesoOrigem: 60000,
+      umidade: 14, imp: 1, avar: 0, queim: 0,
+      pesoDescarga: 59500,
+      dcUmidade: 14, dcImp: 1, dcAvar: 0, dcQueim: 0,
+      cc: { precoSc: 108, umidTol: 14, umidFat: 1.8, impTol: 1, impFat: 1, avarTol: 20, avarFat: 1, queimTol: 1, queimFat: 1 },
+      cv: { precoSc: 115, umidTol: 14, umidFat: 1.8, impTol: 1, impFat: 1, avarTol: 20, avarFat: 1, queimTol: 1, queimFat: 1 },
+      op: { freteTon: 25, quebraTol: 0.5, diasDesagio: 10, comissaoValor: 0.5, comissaoTipo: "sc", custoClassTon: 2 },
+      cfg,
+      flags: { reterFethab: true, reterIagro: false, reterSenar: false, reterFunrural: true },
+    });
+    // FETHAB deve ser > 0 (reterFethab = true)
+    expect(r.retFethab).toBeGreaterThan(0);
+    // IAGRO deve ser 0 (reterIagro = false)
+    expect(r.retIagro).toBe(0);
+    // SENAR deve ser 0 (reterSenar = false)
+    expect(r.retSenar).toBe(0);
+    // FUNRURAL deve ser > 0 (reterFunrural = true)
+    expect(r.retFun).toBeGreaterThan(0);
+    // Valor a pagar = valorCompra - retencoes
+    expect(r.valorPagar).toBeCloseTo(r.valorCompra - r.retencoes, 2);
+  });
+});

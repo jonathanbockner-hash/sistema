@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { SectionHeader, FormSection, Field, EmptyState, PreviewRow, inputCls, selectCls, textareaCls } from "@/components/TimeOpsComponents";
 import { Button } from "@/components/ui/button";
@@ -79,15 +79,16 @@ export default function Descargas() {
   const selectedCompra = compras.find(c => c.id === selectedOp?.compraId);
   const selectedVenda = vendas.find(v => v.id === selectedOp?.vendaId);
 
-  function handleOpenSheet(em: typeof embarquesSemDescarga[0]) {
-    setSelectedEmbarqueId(em.id);
-    // Pré-preenche com dados do embarque
+  // Preenche o formulário quando descargaExistente carrega (evita estado stale)
+  useEffect(() => {
+    if (!selectedEmbarqueId || loadingDescarga) return;
+    const em = todosEmbarques.find(e => e.id === selectedEmbarqueId) ?? embarquesSemDescarga.find(e => e.id === selectedEmbarqueId);
+    if (!em) return;
     setForm({
       ...defaultForm,
       embarqueId: em.id,
       placa: em.placa ?? "",
       nfeSaida: em.nfeSaida ?? "",
-      // Se já existe descarga, preenche com os dados existentes
       ...(descargaExistente ? {
         dataDescarga: descargaExistente.dataDescarga ? new Date(descargaExistente.dataDescarga).toISOString().slice(0, 10) : "",
         pesoDescarga: String(n(descargaExistente.pesoDescarga) || ""),
@@ -102,10 +103,23 @@ export default function Descargas() {
         obs: descargaExistente.obs ?? "",
       } : {}),
     });
+  }, [selectedEmbarqueId, descargaExistente, loadingDescarga]);
+
+  function handleOpenSheet(em: typeof embarquesSemDescarga[0]) {
+    setSelectedEmbarqueId(em.id);
+    // Preenche com dados básicos do embarque imediatamente
+    setForm({
+      ...defaultForm,
+      embarqueId: em.id,
+      placa: em.placa ?? "",
+      nfeSaida: em.nfeSaida ?? "",
+    });
     setErrors({});
     setTicketStatus("idle");
     setTicketFilename("");
     setSheetOpen(true);
+    // Os dados de descarga existente serão preenchidos pelo useEffect acima
+    // quando a query descargaExistente retornar
   }
 
   async function handleUploadTicket(file: File) {
@@ -181,6 +195,12 @@ export default function Descargas() {
           fethabRsTon: n(cfg.fethabRsTon), iagroRsTon: n(cfg.iagroRsTon),
           senarPerc: n(cfg.senarPerc), funruralPerc: n(cfg.funruralPerc),
           fundoMes: n(cfg.fundoMes), dmais: n(cfg.dmais),
+        },
+        flags: {
+          reterFethab: (selectedCompra as any).reterFethab !== false,
+          reterIagro: (selectedCompra as any).reterIagro !== false,
+          reterSenar: (selectedCompra as any).reterSenar !== false,
+          reterFunrural: (selectedCompra as any).reterFunrural !== false,
         },
       });
     } catch { return null; }

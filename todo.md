@@ -79,3 +79,13 @@
 - [x] Bug: Pagamento superior ao saldo não gera crédito com fornecedor no dashboard
 - [x] Bug: Desconto de classificação aplicado mesmo dentro da tolerância do contrato
 - [x] Bug: Relatório com peso balança errado, valor pago não exibido, descontos indevidos de classificação
+
+## Auditoria completa v7
+- [x] Bug: calcRetencoes ignora flags reterFunrural/reterFethab/reterIagro/reterSenar do contrato de compra
+- [x] Bug: Operacoes.tsx tenta ler cl.custoTon que não existe no schema (campo fantasma) — deve usar valor manual
+- [x] Bug: handleUploadComprovante em Pagamentos.tsx tem try/catch externo mas o async está no reader.onload (erros assíncronos não são capturados, uploadingComp pode ficar preso)
+- [x] Bug: handleOpenSheet em Descargas.tsx usa descargaExistente stale (assíncrono) — dados existentes não preenchem o formulário ao abrir
+- [x] Bug: Embarques.tsx permite salvar status "Finalizada" manualmente sem descarga, escondendo carga da tela de Descargas
+- [x] Bug: Relatórios.tsx tem nome de empresa hardcoded "JD COMERCIO DE IMPORTACAO E EXPORTACAO LTDA" — deve ser "TIME Agri Business"
+- [x] Bug: Saldo a pagar em Pagamentos.tsx usa Math.max(0, ...) escondendo crédito com fornecedor (inconsistente com Dashboard/Relatórios)
+- [x] Bug: ContratosVenda.tsx não tem campo "outro" na finalidadeVenda mas o schema aceita — opção faltando no select

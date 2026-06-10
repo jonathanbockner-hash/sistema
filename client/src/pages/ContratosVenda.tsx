@@ -65,6 +65,10 @@ function calcTribVenda(params: {
       icmsDesc = milho
         ? "ICMS 12% s/ base reduzida 41,67% → carga efetiva ~5% (milho interestadual p/ indústria)"
         : "ICMS 12% s/ base reduzida 30,61% → carga efetiva ~3,67% (soja interestadual p/ indústria)";
+    } else if (finalidade === "outro") {
+      // Outro uso interestadual: alíquota cheia 12% (conservador)
+      icmsPerc = 12; icmsBase = 100;
+      icmsDesc = "ICMS 12% base cheia — venda interestadual (outros usos) — verificar enquadramento";
     } else {
       // Trading interestadual: alíquota cheia 12%
       icmsPerc = 12; icmsBase = 100;
@@ -78,7 +82,7 @@ function calcTribVenda(params: {
 const defaultForm = {
   sigla: "", comprador: "", produto: "Soja", qualidade: "Padrão",
   volumeKg: 0, precoSc: 0,
-  destino: "intraestadual", finalidade: "industria",
+  destinoVenda: "intraestadual", finalidadeVenda: "industria",
   umidTol: 14, umidFat: 1.8, impTol: 1, impFat: 1, avarTol: 40, avarFat: 1, queimTol: 1, queimFat: 1,
   obs: "",
 };
@@ -95,8 +99,8 @@ export default function ContratosVenda() {
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
 
   const trib = useMemo(() => calcTribVenda({
-    destino: form.destino, finalidade: form.finalidade, produto: form.produto,
-  }), [form.destino, form.finalidade, form.produto]);
+    destino: form.destinoVenda, finalidade: form.finalidadeVenda, produto: form.produto,
+  }), [form.destinoVenda, form.finalidadeVenda, form.produto]);
 
   const cargaEfetiva = trib.icmsPerc * trib.icmsBase / 100;
   const custoTribSc = form.precoSc > 0
@@ -107,8 +111,8 @@ export default function ContratosVenda() {
     setForm({
       sigla: c.sigla, comprador: c.comprador, produto: c.produto, qualidade: c.qualidade,
       volumeKg: n(c.volumeKg), precoSc: n(c.precoSc),
-      destino: c.destinoVenda ?? "intraestadual",
-      finalidade: c.finalidadeVenda ?? "industria",
+      destinoVenda: c.destinoVenda ?? "intraestadual",
+      finalidadeVenda: c.finalidadeVenda ?? "industria",
       umidTol: n(c.umidTol), umidFat: n(c.umidFat), impTol: n(c.impTol), impFat: n(c.impFat),
       avarTol: n(c.avarTol), avarFat: n(c.avarFat), queimTol: n(c.queimTol), queimFat: n(c.queimFat),
       obs: c.obs ?? "",
@@ -169,18 +173,19 @@ export default function ContratosVenda() {
             <FormSection title="Tributação da operação de venda">
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <Field label="Destino da operação">
-                  <select className={selectCls} value={form.destino} onChange={e => set("destino", e.target.value)}>
+                  <select className={selectCls} value={form.destinoVenda} onChange={e => set("destinoVenda", e.target.value)}>
                     <option value="intraestadual">Intraestadual (dentro do MT)</option>
                     <option value="interestadual">Interestadual (fora do MT)</option>
                   </select>
                 </Field>
                 <Field label="Finalidade / tipo de comprador">
-                  <select className={selectCls} value={form.finalidade} onChange={e => set("finalidade", e.target.value)}>
+                  <select className={selectCls} value={form.finalidadeVenda} onChange={e => set("finalidadeVenda", e.target.value)}>
                     <option value="industria">Indústria (esmagamento/processamento)</option>
                     <option value="racao">Fábrica de ração</option>
                     <option value="confinamento">Confinamento / pecuária</option>
                     <option value="trading">Trading / comercialização</option>
                     <option value="exportacao">Exportação (fim específico)</option>
+                    <option value="outro">Outro</option>
                   </select>
                 </Field>
               </div>

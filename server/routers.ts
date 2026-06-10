@@ -3,6 +3,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
 import { storagePut, storageGetSignedUrl } from "./storage";
 import {
@@ -333,7 +334,20 @@ export const appRouter = router({
       status: z.enum(["Em trânsito", "Descarga pendente", "Finalizada"]).default("Em trânsito"),
       umidade: z.number().default(0), imp: z.number().default(0),
       avar: z.number().default(0), queim: z.number().default(0),
-    })).mutation(({ input }) => upsertEmbarque(input)),
+    })).mutation(async ({ input }) => {
+      // Impede definir status "Finalizada" manualmente sem descarga registrada
+      if (input.status === "Finalizada") {
+        const embarqueId = input.id;
+        if (!embarqueId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Status \"Finalizada\" só pode ser definido após registrar a descarga." });
+        }
+        const descarga = await getDescargaByEmbarque(embarqueId);
+        if (!descarga) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Status \"Finalizada\" só pode ser definido após registrar a descarga." });
+        }
+      }
+      return upsertEmbarque(input);
+    }),
     delete: publicProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteEmbarque(input.id)),
   }),
 

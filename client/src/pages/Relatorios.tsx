@@ -72,6 +72,12 @@ export default function Relatorios() {
         cv: { precoSc: n(cv.precoSc), umidTol: n(cv.umidTol), umidFat: n(cv.umidFat), impTol: n(cv.impTol), impFat: n(cv.impFat), avarTol: n(cv.avarTol), avarFat: n(cv.avarFat), queimTol: n(cv.queimTol), queimFat: n(cv.queimFat) },
         op: { freteTon: n(op.freteTon), quebraTol: n(op.quebraTol), diasDesagio: op.diasDesagio, comissaoValor: n(op.comissaoValor), comissaoTipo: op.comissaoTipo, custoClassTon: n(op.custoClassTon) },
         cfg: cfgN,
+        flags: {
+          reterFethab: (cc as any).reterFethab !== false,
+          reterIagro: (cc as any).reterIagro !== false,
+          reterSenar: (cc as any).reterSenar !== false,
+          reterFunrural: (cc as any).reterFunrural !== false,
+        },
       });
       result.push({ em, op, cc, cv, desc, calc });
     }
@@ -155,7 +161,7 @@ export default function Relatorios() {
     a.click();
   }
 
-  const nomeEmpresa = "JD COMERCIO DE IMPORTACAO E EXPORTACAO LTDA";
+  const nomeEmpresa = "TIME AGRI BUSINESS";
   const emissaoStr = new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR");
 
   return (

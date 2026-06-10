@@ -161,10 +161,8 @@ export default function Operacoes() {
                     <select className={selectCls} value={form.classificadorId ?? ""} onChange={e => {
                       const id = e.target.value ? Number(e.target.value) : null;
                       set("classificadorId", id);
-                      if (id) {
-                        const cl = classificadores.find(c => c.id === id);
-                        if (cl) set("custoClassTon", n((cl as any).custoTon ?? 0.017));
-                      }
+                      // Nota: custoClassTon é definido manualmente pelo usuário no campo abaixo
+                      // O schema de classificadores não possui campo custoTon
                     }}>
                       <option value="">Não definido</option>
                       {classificadores.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}

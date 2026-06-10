@@ -86,6 +86,12 @@ export default function Dashboard() {
         cv: { precoSc: n(em.cv.precoSc), umidTol: n(em.cv.umidTol), umidFat: n(em.cv.umidFat), impTol: n(em.cv.impTol), impFat: n(em.cv.impFat), avarTol: n(em.cv.avarTol), avarFat: n(em.cv.avarFat), queimTol: n(em.cv.queimTol), queimFat: n(em.cv.queimFat) },
         op: { freteTon: n(em.op.freteTon), quebraTol: n(em.op.quebraTol), diasDesagio: n(em.op.diasDesagio), comissaoValor: n(em.op.comissaoValor), comissaoTipo: em.op.comissaoTipo, custoClassTon: n(em.op.custoClassTon) },
         cfg: cfgN,
+        flags: {
+          reterFethab: (em.cc as any).reterFethab !== false,
+          reterIagro: (em.cc as any).reterIagro !== false,
+          reterSenar: (em.cc as any).reterSenar !== false,
+          reterFunrural: (em.cc as any).reterFunrural !== false,
+        },
       });
 
       totalValorCompra += calc.valorCompra;

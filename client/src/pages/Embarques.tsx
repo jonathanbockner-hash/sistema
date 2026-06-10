@@ -69,6 +69,12 @@ export default function Embarques() {
         queimTol: n(selectedCompra.queimTol), queimFat: n(selectedCompra.queimFat),
       },
       cfg: { fethabRsTon: n(cfg.fethabRsTon), iagroRsTon: n(cfg.iagroRsTon), senarPerc: n(cfg.senarPerc), funruralPerc: n(cfg.funruralPerc), fundoMes: n(cfg.fundoMes), dmais: n(cfg.dmais ?? 2) },
+      flags: {
+        reterFethab: (selectedCompra as any).reterFethab !== false,
+        reterIagro: (selectedCompra as any).reterIagro !== false,
+        reterSenar: (selectedCompra as any).reterSenar !== false,
+        reterFunrural: (selectedCompra as any).reterFunrural !== false,
+      },
     });
   }, [form.operacaoId, form.pesoOrigem, form.umidade, form.imp, form.avar, form.queim, selectedCompra, cfg]);
 
@@ -115,9 +121,10 @@ export default function Embarques() {
         toast.success(`NF de saída lida com sucesso! ${d.numeroNF ? `NF ${d.numeroNF}` : ""} — ${d.pesoLiquido ? `${d.pesoLiquido.toLocaleString("pt-BR")} kg` : ""}`);
       } else {
         // NF de entrada: complementa dados que ainda não foram preenchidos
+        // Usa callback funcional para evitar estado stale após await
         if (d.numeroNF) set("nfeEntrada", d.numeroNF);
-        if (!form.placa && d.placa) set("placa", d.placa.replace(/[^A-Z0-9]/gi, "").toUpperCase());
-        if (!form.dataEmbarque && d.dataEmissao) set("dataEmbarque", d.dataEmissao);
+        if (d.placa) setForm((f: any) => ({ ...f, placa: f.placa || d.placa.replace(/[^A-Z0-9]/gi, "").toUpperCase() }));
+        if (d.dataEmissao) setForm((f: any) => ({ ...f, dataEmbarque: f.dataEmbarque || d.dataEmissao }));
         toast.success(`NF de entrada lida com sucesso! ${d.numeroNF ? `NF ${d.numeroNF}` : ""}`);
       }
     } catch (err: any) {
@@ -237,8 +244,9 @@ export default function Embarques() {
                   </Field>
                   <Field label="Status">
                     <select className={selectCls} value={form.status} onChange={e => set("status", e.target.value)}>
-                      {["Em trânsito", "Descarga pendente", "Finalizada"].map(s => <option key={s}>{s}</option>)}
+                      {["Em trânsito", "Descarga pendente"].map(s => <option key={s}>{s}</option>)}
                     </select>
+                    <p className="text-xs text-muted-foreground mt-1">O status "Finalizada" é definido automaticamente ao registrar a descarga</p>
                   </Field>
                 </div>
               </FormSection>

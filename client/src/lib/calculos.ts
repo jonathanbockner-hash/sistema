@@ -90,25 +90,41 @@ export interface TribConfig {
 }
 
 /**
+ * Flags de retenção por contrato de compra.
+ * Quando não fornecidas, todos os tributos são aplicados (comportamento legado).
+ */
+export interface RetencaoFlags {
+  reterFethab?: boolean;
+  reterIagro?: boolean;
+  reterSenar?: boolean;
+  reterFunrural?: boolean;
+}
+
+/**
  * Calcula as retenções tributárias sobre uma operação de compra.
  * @param valorBruto - Valor bruto da compra (R$)
  * @param pesoKg - Peso líquido em kg (após descontos de classificação)
  * @param cfg - Configuração tributária
+ * @param flags - Flags de retenção por contrato (opcional; se omitido, aplica todos)
  */
-export function calcRetencoes(valorBruto: number, pesoKg: number, cfg: TribConfig) {
+export function calcRetencoes(valorBruto: number, pesoKg: number, cfg: TribConfig, flags?: RetencaoFlags) {
   const toneladas = pesoKg / 1000;
+  const aplicarFethab = flags ? (flags.reterFethab !== false) : true;
+  const aplicarIagro  = flags ? (flags.reterIagro  !== false) : true;
+  const aplicarSenar  = flags ? (flags.reterSenar  !== false) : true;
+  const aplicarFun    = flags ? (flags.reterFunrural !== false) : true;
 
   // FETHAB: R$ por tonelada (inclui IAGRO para soja MT)
-  const retFethab = toneladas * n(cfg.fethabRsTon);
+  const retFethab = aplicarFethab ? toneladas * n(cfg.fethabRsTon) : 0;
 
   // IAGRO: R$ por tonelada (separado, se configurado)
-  const retIagro = toneladas * n(cfg.iagroRsTon);
+  const retIagro = aplicarIagro ? toneladas * n(cfg.iagroRsTon) : 0;
 
   // SENAR: % sobre valor bruto
-  const retSenar = valorBruto * n(cfg.senarPerc) / 100;
+  const retSenar = aplicarSenar ? valorBruto * n(cfg.senarPerc) / 100 : 0;
 
   // FUNRURAL: % sobre valor bruto
-  const retFun = valorBruto * n(cfg.funruralPerc) / 100;
+  const retFun = aplicarFun ? valorBruto * n(cfg.funruralPerc) / 100 : 0;
 
   const retencoes = retFethab + retIagro + retSenar + retFun;
   return { retFethab, retIagro, retSenar, retFun, retencoes };
@@ -120,15 +136,16 @@ export interface CalcEmbarqueInput {
   umidade: number; imp: number; avar: number; queim: number;
   cc: { precoSc: number; umidTol: number; umidFat: number; impTol: number; impFat: number; avarTol: number; avarFat: number; queimTol: number; queimFat: number };
   cfg: TribConfig;
+  flags?: RetencaoFlags;
 }
 
 export function calcEmbarque(input: CalcEmbarqueInput) {
-  const { pesoOrigem, cc, cfg } = input;
+  const { pesoOrigem, cc, cfg, flags } = input;
   const cls = classif(pesoOrigem, { umidade: input.umidade, imp: input.imp, avar: input.avar, queim: input.queim }, cc);
   const kgCompra = Math.max(0, pesoOrigem - cls.totalKg);
   const scCompra = kgCompra / 60;
   const valorCompra = scCompra * n(cc.precoSc);
-  const { retFethab, retIagro, retSenar, retFun, retencoes } = calcRetencoes(valorCompra, kgCompra, cfg);
+  const { retFethab, retIagro, retSenar, retFun, retencoes } = calcRetencoes(valorCompra, kgCompra, cfg, flags);
   return { cls, kgCompra, scCompra, valorCompra, retFethab, retIagro, retSenar, retFun, retencoes, valorPagar: valorCompra - retencoes };
 }
 
@@ -142,7 +159,7 @@ export interface CalcFinalInput extends CalcEmbarqueInput {
 }
 
 export function calcFinal(input: CalcFinalInput) {
-  const { pesoOrigem, pesoDescarga, cc, cv, op, cfg } = input;
+  const { pesoOrigem, pesoDescarga, cc, cv, op, cfg, flags } = input;
   const temDesc = n(pesoDescarga) > 0;
 
   // Classificação na origem contra contrato de compra
@@ -161,7 +178,7 @@ export function calcFinal(input: CalcFinalInput) {
   const basePesoCompra = temDesc ? pesoDescarga : pesoOrigem;
   const kgCompra = Math.max(0, basePesoCompra - clsCompraDesc.totalKg);
   const valorCompra = (kgCompra / 60) * n(cc.precoSc);
-  const { retFethab, retIagro, retSenar, retFun, retencoes } = calcRetencoes(valorCompra, kgCompra, cfg);
+  const { retFethab, retIagro, retSenar, retFun, retencoes } = calcRetencoes(valorCompra, kgCompra, cfg, flags);
   const valorPagar = valorCompra - retencoes;
 
   // Venda
