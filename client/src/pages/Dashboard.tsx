@@ -19,6 +19,7 @@ export default function Dashboard() {
   const { data: cfg } = trpc.config.get.useQuery();
   const { data: pagamentos = [] } = trpc.pagamentos.list.useQuery({});
   const { data: descargas = [] } = trpc.descargas.list.useQuery();
+  const { data: despesas = [] } = trpc.despesas.list.useQuery({});
 
   const cfgN = {
     fethabRsTon: n(cfg?.fethabRsTon),
@@ -109,6 +110,7 @@ export default function Dashboard() {
     const lucroBruto = totalValorVenda - totalValorCompra;
     const custoOperacional = totalFrete + totalClassCusto + totalDesagio + totalPrejuQuebra;
     const lucroLiquido = lucroBruto - custoOperacional - totalComissao;
+    const totalDespesasLancadas = despesas.reduce((a: number, d: any) => a + n(d.valor), 0);
     const totalPago = pagamentos.reduce((a: number, p: any) => a + n(p.valor), 0);
     // Saldo a pagar = valor líquido ao produtor (já descontadas retenções) menos o que já foi pago
     // As retenções (FETHAB, IAGRO, SENAR, FUNRURAL) são retidas pela TIME e recolhidas ao fisco,
@@ -133,8 +135,9 @@ export default function Dashboard() {
       creditoFornecedor,
       emAberto,
       finalizadas,
+      totalDespesasLancadas,
     };
-  }, [filtered, pagamentos, cfgN]);
+  }, [filtered, pagamentos, despesas, cfgN]);
 
   function exportCSV() {
     const rows = [
@@ -226,6 +229,11 @@ export default function Dashboard() {
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-0.5">Pagamentos &amp; Cargas</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           <KpiCard label="Total pago" value={brl(kpis.totalPago)} trend="up" />
+          <div className="rounded-xl border border-border bg-card p-4 space-y-1">
+            <p className="text-xs text-muted-foreground">Despesas operacionais</p>
+            <p className="text-xl font-bold font-mono text-amber-400">{brl(kpis.totalDespesasLancadas)}</p>
+            <p className="text-xs text-muted-foreground">Comissões, retenções e outros</p>
+          </div>
           {kpis.creditoFornecedor > 0.01 ? (
             <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/5 p-4 space-y-1">
               <p className="text-xs text-emerald-400 font-semibold">Crédito c/ Fornecedor</p>

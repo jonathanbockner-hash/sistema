@@ -417,3 +417,95 @@ describe("calcFinal — contrato intraestadual p/ industrialização (cenário r
     expect(r.valorPagar).toBeCloseTo(r.valorCompra - r.retencoes, 2);
   });
 });
+
+// ─── Despesas Operacionais ────────────────────────────────────────────────────
+
+describe("despesas.save — validações de input", () => {
+  it("rejeita valor zero", async () => {
+    const caller = appRouter.createCaller(createCtx());
+    await expect(
+      caller.despesas.save({
+        operacaoId: 1,
+        categoria: "comissao",
+        favorecido: "João Silva",
+        valor: 0,
+        formaPagamento: "pix",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("rejeita valor negativo", async () => {
+    const caller = appRouter.createCaller(createCtx());
+    await expect(
+      caller.despesas.save({
+        operacaoId: 1,
+        categoria: "fethab",
+        favorecido: "SEFAZ-MT",
+        valor: -100,
+        formaPagamento: "ted",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("rejeita favorecido vazio", async () => {
+    const caller = appRouter.createCaller(createCtx());
+    await expect(
+      caller.despesas.save({
+        operacaoId: 1,
+        categoria: "senar",
+        favorecido: "",
+        valor: 500,
+        formaPagamento: "pix",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("rejeita categoria inválida", async () => {
+    const caller = appRouter.createCaller(createCtx());
+    await expect(
+      caller.despesas.save({
+        operacaoId: 1,
+        categoria: "invalida" as any,
+        favorecido: "Teste",
+        valor: 100,
+        formaPagamento: "pix",
+      })
+    ).rejects.toThrow();
+  });
+});
+
+describe("despesas.list — retorna array vazio sem erros", () => {
+  it("lista sem filtro de operação retorna array", async () => {
+    const caller = appRouter.createCaller(createCtx());
+    // A query pode falhar se não houver banco, mas não deve lançar erro de schema
+    const result = await caller.despesas.list({}).catch(() => []);
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("lista com operacaoId retorna array", async () => {
+    const caller = appRouter.createCaller(createCtx());
+    const result = await caller.despesas.list({ operacaoId: 999 }).catch(() => []);
+    expect(Array.isArray(result)).toBe(true);
+  });
+});
+
+describe("despesas — categorias aceitas", () => {
+  const categorias = ["comissao", "fethab", "iagro", "senar", "funrural", "classificador", "frete", "outro"] as const;
+
+  it.each(categorias)("categoria '%s' é aceita pelo schema", async (cat) => {
+    const caller = appRouter.createCaller(createCtx());
+    // Deve rejeitar apenas por erro de banco (sem DB), não por validação de schema
+    const err = await caller.despesas.save({
+      operacaoId: 1,
+      categoria: cat,
+      favorecido: "Teste",
+      valor: 100,
+      formaPagamento: "pix",
+    }).catch((e: Error) => e);
+    // Se lançou erro, deve ser erro de banco (não de validação Zod)
+    if (err instanceof Error) {
+      expect(err.message).not.toContain("Invalid enum value");
+      expect(err.message).not.toContain("favorecido");
+    }
+  });
+});

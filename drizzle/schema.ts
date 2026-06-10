@@ -207,6 +207,53 @@ export const descargas = mysqlTable("descargas", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+// ─── Despesas Operacionais ──────────────────────────────────────────────────
+/**
+ * Lançamentos de despesas vinculadas a uma operação:
+ * - Comissões pagas a corretores
+ * - Retenções recolhidas ao fisco (FETHAB, IAGRO, SENAR, FUNRURAL)
+ * - Custos de classificador
+ * - Frete (transportadora)
+ * - Outros prestadores de serviço
+ */
+export const despesasOperacionais = mysqlTable("despesas_operacionais", {
+  id: int("id").autoincrement().primaryKey(),
+  operacaoId: int("operacaoId").notNull(),
+  /**
+   * Categoria da despesa:
+   * comissao = comissão de corretor
+   * fethab = recolhimento FETHAB ao fisco
+   * iagro = recolhimento IAGRO ao fisco
+   * senar = recolhimento SENAR ao fisco
+   * funrural = recolhimento FUNRURAL ao fisco
+   * classificador = custo de classificação
+   * frete = pagamento de frete à transportadora
+   * outro = outros prestadores / despesas diversas
+   */
+  categoria: mysqlEnum("categoria", [
+    "comissao",
+    "fethab",
+    "iagro",
+    "senar",
+    "funrural",
+    "classificador",
+    "frete",
+    "outro",
+  ]).notNull(),
+  favorecido: varchar("favorecido", { length: 255 }).notNull(),
+  descricao: varchar("descricao", { length: 500 }),
+  valor: decimal("valor", { precision: 15, scale: 2 }).notNull(),
+  dataPagamento: timestamp("dataPagamento"),
+  formaPagamento: mysqlEnum("formaPagamento", ["pix", "ted", "doc", "boleto", "cheque", "outro"]).default("pix"),
+  comprovanteUrl: varchar("comprovanteUrl", { length: 1000 }),
+  obs: text("obs"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DespesaOperacional = typeof despesasOperacionais.$inferSelect;
+export type InsertDespesaOperacional = typeof despesasOperacionais.$inferInsert;
+
 // ─── Pagamentos ──────────────────────────────────────────────────────────────
 export const pagamentos = mysqlTable("pagamentos", {
   id: int("id").autoincrement().primaryKey(),

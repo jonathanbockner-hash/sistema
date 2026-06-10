@@ -16,6 +16,7 @@ import {
   listEmbarques, listEmbarquesSemDescarga, getEmbarque, upsertEmbarque, deleteEmbarque,
   getDescargaByEmbarque, upsertDescarga, listDescargas,
   listPagamentos, upsertPagamento, deletePagamento,
+  listDespesas, upsertDespesa, deleteDespesa,
 } from "./db";
 
 const classifSchema = z.object({
@@ -434,6 +435,49 @@ export const appRouter = router({
       let parsed: any = {};
       try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); } catch {}
       return { ...parsed, comprovanteUrl: url };
+    }),
+  }),
+
+  // ─── Despesas Operacionais ──────────────────────────────────────────────────────────────
+  despesas: router({
+  list: publicProcedure
+    .input(z.object({ operacaoId: z.number().optional() }))
+    .query(async ({ input }) => {
+      return listDespesas(input.operacaoId);
+    }),
+
+  save: publicProcedure
+    .input(z.object({
+      id: z.number().optional(),
+      operacaoId: z.number(),
+      categoria: z.enum(["comissao","fethab","iagro","senar","funrural","classificador","frete","outro"]),
+      favorecido: z.string().min(1, "Favorecido obrigatório"),
+      descricao: z.string().optional(),
+      valor: z.number().positive("Valor deve ser positivo"),
+      dataPagamento: z.string().nullable().optional(),
+      formaPagamento: z.enum(["pix","ted","doc","boleto","cheque","outro"]).default("pix"),
+      comprovanteUrl: z.string().nullable().optional(),
+      obs: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const id = await upsertDespesa(input);
+      return { id };
+    }),
+
+  delete: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteDespesa(input.id);
+      return { ok: true };
+    }),
+
+  uploadComprovante: publicProcedure
+    .input(z.object({ base64: z.string(), mimeType: z.string() }))
+    .mutation(async ({ input }) => {
+      const buf = Buffer.from(input.base64, "base64");
+      const key = `despesas-comprovantes/${Date.now()}.${input.mimeType.includes("pdf") ? "pdf" : "jpg"}`;
+      const { url } = await storagePut(key, buf, input.mimeType);
+      return { comprovanteUrl: url };
     }),
   }),
 });

@@ -23,7 +23,7 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, ShoppingCart, TrendingUp,
-  Link2, Users, Truck, Package, CreditCard, FileText, Settings, Handshake
+  Link2, Users, Truck, Package, CreditCard, FileText, Settings, Handshake, Receipt
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -40,6 +40,7 @@ const menuItems = [
   { icon: Truck, label: "Lançar Embarque", path: "/embarques" },
   { icon: Package, label: "Lançar Descarga", path: "/descargas" },
   { icon: CreditCard, label: "Pagamentos Compra", path: "/pagamentos" },
+  { icon: Receipt, label: "Despesas Operacionais", path: "/despesas" },
   { icon: FileText, label: "Emitir Relatório", path: "/relatorios" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];

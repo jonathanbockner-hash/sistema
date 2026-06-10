@@ -2,7 +2,8 @@ import { eq, desc, and, gte, lte, isNull, ne, notExists, sql } from "drizzle-orm
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, config, classificadores, corretores,
-  contratosCompra, contratosVenda, operacoes, embarques, descargas, pagamentos
+  contratosCompra, contratosVenda, operacoes, embarques, descargas, pagamentos,
+  despesasOperacionais,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -417,4 +418,53 @@ export async function deletePagamento(id: number) {
   const db = await getDb();
   if (!db) return;
   await db.delete(pagamentos).where(eq(pagamentos.id, id));
+}
+
+// ─── Despesas Operacionais ──────────────────────────────────────────────────────────────
+export async function listDespesas(operacaoId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return operacaoId
+    ? db.select().from(despesasOperacionais).where(eq(despesasOperacionais.operacaoId, operacaoId)).orderBy(desc(despesasOperacionais.createdAt))
+    : db.select().from(despesasOperacionais).orderBy(desc(despesasOperacionais.createdAt));
+}
+
+export async function upsertDespesa(data: {
+  id?: number;
+  operacaoId: number;
+  categoria: string;
+  favorecido: string;
+  descricao?: string;
+  valor: number;
+  dataPagamento?: string | null;
+  formaPagamento?: string;
+  comprovanteUrl?: string | null;
+  obs?: string;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  const payload = {
+    operacaoId: data.operacaoId,
+    categoria: data.categoria as any,
+    favorecido: data.favorecido,
+    descricao: data.descricao ?? null,
+    valor: String(data.valor),
+    dataPagamento: data.dataPagamento ? new Date(data.dataPagamento) : null,
+    formaPagamento: (data.formaPagamento ?? 'pix') as any,
+    comprovanteUrl: data.comprovanteUrl ?? null,
+    obs: data.obs ?? null,
+  };
+  if (data.id) {
+    await db.update(despesasOperacionais).set(payload).where(eq(despesasOperacionais.id, data.id));
+    return data.id;
+  } else {
+    const result = await db.insert(despesasOperacionais).values(payload);
+    return (result as any)[0]?.insertId ?? null;
+  }
+}
+
+export async function deleteDespesa(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(despesasOperacionais).where(eq(despesasOperacionais.id, id));
 }

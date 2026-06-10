@@ -14,6 +14,7 @@ import Embarques from "./pages/Embarques";
 import Descargas from "./pages/Descargas";
 import Pagamentos from "./pages/Pagamentos";
 import Relatorios from "./pages/Relatorios";
+import DespesasOperacionais from "./pages/DespesasOperacionais";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 
@@ -30,6 +31,7 @@ function Router() {
         <Route path="/embarques" component={Embarques} />
         <Route path="/descargas" component={Descargas} />
         <Route path="/pagamentos" component={Pagamentos} />
+        <Route path="/despesas" component={DespesasOperacionais} />
         <Route path="/relatorios" component={Relatorios} />
         <Route path="/configuracoes" component={Configuracoes} />
         <Route component={NotFound} />
