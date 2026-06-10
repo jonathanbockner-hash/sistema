@@ -62,6 +62,9 @@ export default function Relatorios() {
       const cv = vendas.find(v => v.id === op?.vendaId);
       if (!cc || !cv || !op) continue;
       const desc = descargas.find((d: any) => d.embarqueId === em.id);
+      // Para o relatório de compra: comissão e classificador são custos da operação (compra+venda)
+      // e só aparecem no relatório consolidado. No fechamento de compra, zeramos esses campos.
+      const isCompra = tipo === "compra";
       const calc = calcFinal({
         pesoOrigem: n(em.pesoOrigem),
         umidade: n(em.umidade), imp: n(em.imp), avar: n(em.avar), queim: n(em.queim),
@@ -70,7 +73,15 @@ export default function Relatorios() {
         dcAvar: n(desc?.dcAvar ?? 0), dcQueim: n(desc?.dcQueim ?? 0),
         cc: { precoSc: n(cc.precoSc), umidTol: n(cc.umidTol), umidFat: n(cc.umidFat), impTol: n(cc.impTol), impFat: n(cc.impFat), avarTol: n(cc.avarTol), avarFat: n(cc.avarFat), queimTol: n(cc.queimTol), queimFat: n(cc.queimFat) },
         cv: { precoSc: n(cv.precoSc), umidTol: n(cv.umidTol), umidFat: n(cv.umidFat), impTol: n(cv.impTol), impFat: n(cv.impFat), avarTol: n(cv.avarTol), avarFat: n(cv.avarFat), queimTol: n(cv.queimTol), queimFat: n(cv.queimFat) },
-        op: { freteTon: n(op.freteTon), quebraTol: n(op.quebraTol), diasDesagio: op.diasDesagio, comissaoValor: n(op.comissaoValor), comissaoTipo: op.comissaoTipo, custoClassTon: n(op.custoClassTon) },
+        op: {
+          freteTon: n(op.freteTon),
+          quebraTol: n(op.quebraTol),
+          diasDesagio: op.diasDesagio,
+          // Comissão e classificador: zero no relatório de compra, valor real no consolidado
+          comissaoValor: isCompra ? 0 : n(op.comissaoValor),
+          comissaoTipo: op.comissaoTipo,
+          custoClassTon: isCompra ? 0 : n(op.custoClassTon),
+        },
         cfg: cfgN,
         flags: {
           reterFethab: (cc as any).reterFethab !== false,
@@ -82,7 +93,7 @@ export default function Relatorios() {
       result.push({ em, op, cc, cv, desc, calc });
     }
     return result;
-  }, [embarquesFiltrados, operacoes, compras, vendas, descargas, cfg]);
+  }, [embarquesFiltrados, operacoes, compras, vendas, descargas, cfg, tipo]);
 
   const totais = useMemo(() => linhas.reduce((acc, l) => ({
     pesoBal: acc.pesoBal + (l.desc ? n(l.desc.pesoDescarga) : n(l.em.pesoOrigem)),
@@ -437,17 +448,24 @@ export default function Relatorios() {
                       <td className="text-right">0,00</td>
                       <td className="pl-2 text-gray-600">NFe Compl.</td>
                     </tr>
-                    <tr>
-                      <td>Total Avariado:</td>
-                      <td className="text-right">
-                        {totais.avar > 0
-                          ? <span className="text-red-700">{fmt(totais.avar, 3)}</span>
-                          : <span className="text-gray-400">0,000</span>
-                        }
-                      </td>
-                      <td className="text-right">{brl(totais.comissao + totais.desagio)}</td>
-                      <td className="pl-2 text-gray-600">Nota de Débito</td>
-                    </tr>
+                    {totais.avar > 0 && (
+                      <tr>
+                        <td>Total Avariado:</td>
+                        <td className="text-right">
+                          <span className="text-red-700">{fmt(totais.avar, 3)}</span>
+                        </td>
+                        <td className="text-right text-red-700">
+                          {/* valor monetário do desconto de avariado = kg desconto × preço/kg */}
+                          {brl(linhas.reduce((s, l) => {
+                            const clsRef = l.desc ? l.calc.clsCompraDesc : l.calc.clsOrig;
+                            const kgAvar = clsRef.avar.kgDesc;
+                            const precoKg = l.calc.valorCompra / (l.calc.kgCompra || 1);
+                            return s + kgAvar * precoKg;
+                          }, 0))}
+                        </td>
+                        <td className="pl-2 text-gray-600">Desc. Avariado</td>
+                      </tr>
+                    )}
                     <tr className="border-t border-gray-300 font-bold">
                       <td>Total Líquido:</td>
                       <td className="text-right">{fmt(totais.kgCompra, 3)}</td>
