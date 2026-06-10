@@ -110,24 +110,39 @@ export default function DespesasOperacionais() {
     if (cat === "comissao" && opDetalhes.corretor) {
       const corretor = opDetalhes.corretor;
       const op = opDetalhes;
-      // Calcular valor estimado de comissão
+      // Calcular valor estimado de comissão para todos os tipos
       let valorEst = 0;
+      const comissaoValor = parseFloat(String(op.comissaoValor ?? 0));
       if (op.comissaoTipo === "fixo") {
-        valorEst = parseFloat(String(op.comissaoValor));
+        valorEst = comissaoValor;
+      } else if (op.comissaoTipo === "sc") {
+        // comissaoValor = R$/sc; estima pelo total de SC do contrato de compra
+        // Sem acesso ao peso total aqui, deixar campo vazio para preenchimento manual
+        valorEst = 0;
+      } else if (op.comissaoTipo === "ton") {
+        // comissaoValor = R$/ton; sem peso total disponível aqui
+        valorEst = 0;
+      } else if (op.comissaoTipo === "percVenda") {
+        // comissaoValor = % sobre valor de venda; sem valor de venda aqui
+        valorEst = 0;
       }
       setForm(f => ({
         ...f,
         favorecido: f.favorecido || corretor.nome,
         valor: f.valor || (valorEst > 0 ? String(valorEst.toFixed(2)) : ""),
-        formaPagamento: corretor.pix ? "pix" : f.formaPagamento,
+        formaPagamento: (corretor as any).pix ? "pix" : f.formaPagamento,
+        descricao: f.descricao || `Comissão ${op.comissaoTipo === "fixo" ? "valor fixo" : op.comissaoTipo === "sc" ? "por saca" : op.comissaoTipo === "ton" ? "por tonelada" : "% sobre venda"} — ${op.sigla}`,
       }));
       setAutoPreenchido(true);
     } else if (cat === "classificador" && opDetalhes.classificador) {
       const cl = opDetalhes.classificador;
+      const op = opDetalhes;
+      // custoClassTon = R$/ton; sem peso total aqui, deixar para preenchimento manual
       setForm(f => ({
         ...f,
         favorecido: f.favorecido || cl.nome,
-        formaPagamento: cl.pix ? "pix" : f.formaPagamento,
+        formaPagamento: (cl as any).pix ? "pix" : f.formaPagamento,
+        descricao: f.descricao || `Classificação — ${op.sigla} (R$ ${parseFloat(String(op.custoClassTon ?? 0)).toFixed(3)}/ton)`,
       }));
       setAutoPreenchido(true);
     } else {
@@ -358,7 +373,7 @@ export default function DespesasOperacionais() {
                           <CheckCircle className="h-3 w-3" /> Pago
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs bg-yellow-500/20 text-yellow-300 border-yellow-500/30 gap-1">
+                        <Badge variant="outline" className="text-xs bg-red-500/20 text-red-300 border-red-500/30 gap-1">
                           <Clock className="h-3 w-3" /> Aberto
                         </Badge>
                       )}

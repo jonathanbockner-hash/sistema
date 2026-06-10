@@ -12,11 +12,14 @@ CREATE TABLE IF NOT EXISTS `despesas_operacionais` (
   `forma_pagamento` enum('pix','ted','doc','boleto','cheque','outro'),
   `comprovante_url` varchar(1000),
   `obs` text,
-  `pago` boolean NOT NULL DEFAULT false,
-  `data_baixa` date,
+  `pago` tinyint(1) NOT NULL DEFAULT 0,
+  `data_baixa` varchar(10),
   `comprovante_texto` text,
   `created_at` timestamp NOT NULL DEFAULT (now()),
   `updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `despesas_operacionais_id` PRIMARY KEY (`id`)
 );
--- Nota: colunas pago, data_baixa, comprovante_texto foram adicionadas via ALTER TABLE separado.
+-- Nota: colunas pago, data_baixa, comprovante_texto foram adicionadas via ALTER TABLE em sessão separada.
+-- ALTER TABLE despesas_operacionais ADD COLUMN pago tinyint(1) NOT NULL DEFAULT 0;
+-- ALTER TABLE despesas_operacionais ADD COLUMN data_baixa varchar(10);
+-- ALTER TABLE despesas_operacionais ADD COLUMN comprovante_texto text;

@@ -123,9 +123,9 @@
 - [x] Testes: 48 testes passando, TypeScript limpo
 
 ## Melhorias Despesas/Baixa v8
-- [ ] Segurança: converter procedures despesas.* de publicProcedure para protectedProcedure
-- [ ] Pré-preenchimento: ao selecionar categoria Comissão/Classificador, buscar nome e valor estimado da operação
-- [ ] Matching inteligente: lerComprovante cruzar com nomes de corretores/classificadores cadastrados
-- [ ] Status pago/aberto na tabela de Despesas Operacionais (badge verde/vermelho)
-- [ ] Migration: sincronizar colunas pago/dataBaixa/comprovanteTexto no arquivo SQL
-- [ ] Valor calculado automaticamente para Comissão e Classificador ao selecionar operação
+- [x] Segurança: converter procedures despesas.* de publicProcedure para protectedProcedure
+- [x] Pré-preenchimento: ao selecionar categoria Comissão/Classificador, buscar nome e valor estimado da operação
+- [x] Matching inteligente: lerComprovante cruzar com nomes de corretores/classificadores cadastrados
+- [x] Status pago/aberto na tabela de Despesas Operacionais (badge verde/vermelho)
+- [x] Migration: sincronizar colunas pago/dataBaixa/comprovanteTexto no arquivo SQL
+- [x] Valor calculado automaticamente para Comissão e Classificador ao selecionar operação
