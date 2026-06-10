@@ -221,7 +221,7 @@ export default function Relatorios() {
             <img
               src="/manus-storage/logo-time-agri_6188c408.webp"
               alt="TIME Agri Business"
-              style={{ height: 52, width: "auto", objectFit: "contain" }}
+              style={{ height: 100, width: "auto", objectFit: "contain" }}
             />
           </div>
           <div className="text-center flex-1 px-4">

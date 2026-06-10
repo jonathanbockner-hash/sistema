@@ -147,20 +147,20 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
     <>
       <div className="relative" ref={sidebarRef}>
         <Sidebar collapsible="icon" className="border-r border-border/50" disableTransition={isResizing}>
-          <SidebarHeader className="h-16 justify-center border-b border-border/50">
+          <SidebarHeader className="h-24 justify-center border-b border-border/50">
             <div className="flex items-center gap-2.5 px-2 w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none shrink-0"
+                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none shrink-0 self-start mt-1"
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed && (
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center justify-center flex-1 min-w-0 py-1">
                   <img
                     src="/manus-storage/logo-time-agri_6188c408.webp"
                     alt="TIME Agri Business"
-                    className="h-11 w-auto object-contain drop-shadow-sm"
+                    className="h-20 w-auto object-contain drop-shadow-md"
                   />
                 </div>
               )}
