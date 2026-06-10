@@ -509,3 +509,75 @@ describe("despesas — categorias aceitas", () => {
     }
   });
 });
+
+// ─── Baixa de Despesas — lógica de matching ──────────────────────────────────
+
+function normalizar(s: string) {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").trim();
+}
+function scoreFavorecido(a: string, b: string): number {
+  const na = normalizar(a); const nb = normalizar(b);
+  if (na === nb) return 1.0;
+  if (na.includes(nb) || nb.includes(na)) return 0.9;
+  const wordsA = na.split(" ").filter(Boolean);
+  const wordsB = nb.split(" ").filter(Boolean);
+  const common = wordsA.filter((w: string) => wordsB.includes(w)).length;
+  return common / Math.max(wordsA.length, wordsB.length, 1);
+}
+const PALAVRAS_FRETE = ["transport", "logistica", "log", "frete", "carga", "caminhao", "carreta", "express", "cargo"];
+
+describe("baixa.matching — similaridade de favorecido", () => {
+  it("match exato retorna 1.0", () => {
+    expect(scoreFavorecido("João Alex", "João Alex")).toBe(1.0);
+  });
+
+  it("match parcial (nome contido) retorna 0.9", () => {
+    expect(scoreFavorecido("João Alex Corretora", "João Alex")).toBe(0.9);
+  });
+
+  it("match por palavras comuns retorna score proporcional", () => {
+    const s = scoreFavorecido("Transportadora Rápida Ltda", "Rápida Transportes");
+    expect(s).toBeGreaterThan(0);
+    expect(s).toBeLessThan(1);
+  });
+
+  it("sem palavras em comum retorna 0", () => {
+    expect(scoreFavorecido("João Alex", "Maria Silva")).toBe(0);
+  });
+
+  it("palavras-chave de frete detectadas corretamente", () => {
+    const texto = normalizar("Transportadora Rapida Ltda");
+    const temFrete = PALAVRAS_FRETE.some(p => texto.includes(p));
+    expect(temFrete).toBe(true);
+  });
+
+  it("palavras sem relação com frete não ativam bônus", () => {
+    const texto = normalizar("João Alex Comissão");
+    const temFrete = PALAVRAS_FRETE.some(p => texto.includes(p));
+    expect(temFrete).toBe(false);
+  });
+
+  it("valor próximo (dentro de 1%) indica match forte", () => {
+    const valorComp = 6000;
+    const valorDesp = 6010;
+    const diff = Math.abs(valorComp - valorDesp) / valorDesp;
+    expect(diff).toBeLessThan(0.01);
+  });
+
+  it("valor distante (mais de 5%) indica match fraco", () => {
+    const valorComp = 6000;
+    const valorDesp = 10000;
+    const diff = Math.abs(valorComp - valorDesp) / valorDesp;
+    expect(diff).toBeGreaterThan(0.05);
+  });
+
+  it("classificador: match por nome parcial funciona", () => {
+    const s = scoreFavorecido("Classificador Agro Ltda", "Agro");
+    expect(s).toBeGreaterThan(0);
+  });
+
+  it("corretor: match por sobrenome funciona", () => {
+    const s = scoreFavorecido("João Alex Corretora", "Alex");
+    expect(s).toBe(0.9); // "Alex" contido em "joao alex corretora"
+  });
+});

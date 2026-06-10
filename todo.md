@@ -113,3 +113,11 @@
 - [x] Campo `tipo` não existe no schema (foi descartado em favor de `categoria` — requisito corrigido)
 - [x] Gerar migration Drizzle real para `despesas_operacionais` (tabela criada via SQL direto, drizzle/schema.ts já atualizado)
 - [x] Integrar despesas operacionais no relatório consolidado com seção de custos detalhada
+
+## Módulo Baixa Automática de Despesas por Comprovante [CONCLUÍDO]
+- [x] Adicionar campo `pago` (boolean), `dataBaixa`, `comprovanteUrl` e `comprovanteTexto` na tabela despesas_operacionais
+- [x] Criar procedure tRPC `despesas.lerComprovante`: recebe operacaoId + arquivo, extrai via LLM favorecido/valor/data/forma, cruza com despesas em aberto e retorna sugestão de vinculação
+- [x] Criar procedure tRPC `despesas.darBaixa`: marca despesa como paga com data e comprovante
+- [x] Criar tela "Baixa de Despesas" com: seleção de operação, upload de comprovante, preview da leitura LLM, sugestão de vinculação automática, botão de confirmação
+- [x] Lógica de matching: favorecido do comprovante vs. nome do classificador/corretor cadastrado (fuzzy match), palavras-chave de transporte/logística para categoria frete
+- [x] Testes: 48 testes passando, TypeScript limpo

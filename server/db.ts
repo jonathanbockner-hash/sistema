@@ -468,3 +468,20 @@ export async function deleteDespesa(id: number) {
   if (!db) return;
   await db.delete(despesasOperacionais).where(eq(despesasOperacionais.id, id));
 }
+
+export async function darBaixaDespesa(data: {
+  id: number;
+  dataBaixa: string;
+  comprovanteUrl?: string | null;
+  comprovanteTexto?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(despesasOperacionais).set({
+    pago: true,
+    dataBaixa: new Date(data.dataBaixa),
+    comprovanteUrl: data.comprovanteUrl ?? null,
+    comprovanteTexto: data.comprovanteTexto ?? null,
+    updatedAt: new Date(),
+  }).where(eq(despesasOperacionais.id, data.id));
+}

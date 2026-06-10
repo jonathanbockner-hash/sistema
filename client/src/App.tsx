@@ -15,6 +15,7 @@ import Descargas from "./pages/Descargas";
 import Pagamentos from "./pages/Pagamentos";
 import Relatorios from "./pages/Relatorios";
 import DespesasOperacionais from "./pages/DespesasOperacionais";
+import BaixaDespesas from "./pages/BaixaDespesas";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 
@@ -32,6 +33,7 @@ function Router() {
         <Route path="/descargas" component={Descargas} />
         <Route path="/pagamentos" component={Pagamentos} />
         <Route path="/despesas" component={DespesasOperacionais} />
+        <Route path="/baixa-despesas" component={BaixaDespesas} />
         <Route path="/relatorios" component={Relatorios} />
         <Route path="/configuracoes" component={Configuracoes} />
         <Route component={NotFound} />

@@ -247,6 +247,12 @@ export const despesasOperacionais = mysqlTable("despesas_operacionais", {
   formaPagamento: mysqlEnum("formaPagamento", ["pix", "ted", "doc", "boleto", "cheque", "outro"]).default("pix"),
   comprovanteUrl: varchar("comprovanteUrl", { length: 1000 }),
   obs: text("obs"),
+  /** true = baixa confirmada pelo financeiro */
+  pago: boolean("pago").default(false).notNull(),
+  /** data em que o pagamento foi confirmado/baixado */
+  dataBaixa: timestamp("dataBaixa"),
+  /** texto extraído do comprovante pelo LLM para auditoria */
+  comprovanteTexto: text("comprovanteTexto"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

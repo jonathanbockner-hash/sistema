@@ -16,7 +16,7 @@ import {
   listEmbarques, listEmbarquesSemDescarga, getEmbarque, upsertEmbarque, deleteEmbarque,
   getDescargaByEmbarque, upsertDescarga, listDescargas,
   listPagamentos, upsertPagamento, deletePagamento,
-  listDespesas, upsertDespesa, deleteDespesa,
+  listDespesas, upsertDespesa, deleteDespesa, darBaixaDespesa,
 } from "./db";
 
 const classifSchema = z.object({
@@ -478,6 +478,125 @@ export const appRouter = router({
       const key = `despesas-comprovantes/${Date.now()}.${input.mimeType.includes("pdf") ? "pdf" : "jpg"}`;
       const { url } = await storagePut(key, buf, input.mimeType);
       return { comprovanteUrl: url };
+    }),
+
+  /**
+   * Recebe um comprovante (base64) + lista de despesas em aberto da operação.
+   * Usa LLM para extrair: favorecido, valor, data, forma de pagamento.
+   * Cruza com as despesas em aberto e retorna sugestões de vinculação.
+   */
+  lerComprovante: publicProcedure
+    .input(z.object({
+      base64: z.string(),
+      mimeType: z.string(),
+      operacaoId: z.number(),
+    }))
+    .mutation(async ({ input }) => {
+      // 1. Fazer upload do comprovante
+      const buf = Buffer.from(input.base64, "base64");
+      const key = `despesas-comprovantes/${Date.now()}.${input.mimeType.includes("pdf") ? "pdf" : "jpg"}`;
+      const { url: comprovanteUrl } = await storagePut(key, buf, input.mimeType);
+
+      // 2. Buscar despesas em aberto da operação
+      const despesasAbertas = await listDespesas(input.operacaoId);
+      const abertas = despesasAbertas.filter((d: any) => !d.pago);
+
+      // 3. Extrair dados do comprovante via LLM
+      const isImage = input.mimeType.startsWith("image/");
+      const content: any[] = [
+        {
+          type: "text",
+          text: `Analise este comprovante de pagamento e extraia as informações. Responda APENAS com JSON no formato:\n{\n  "favorecido": "nome completo do favorecido/beneficiário",\n  "valor": 0.00,\n  "data": "YYYY-MM-DD",\n  "formaPagamento": "pix|ted|doc|boleto|cheque|outro",\n  "banco": "nome do banco",\n  "textoCompleto": "texto resumido do comprovante",\n  "palavrasChave": ["lista", "de", "palavras", "relevantes"]\n}`,
+        },
+        isImage
+          ? { type: "image_url", image_url: { url: `data:${input.mimeType};base64,${input.base64}`, detail: "high" } }
+          : { type: "file_url", file_url: { url: comprovanteUrl, mime_type: input.mimeType as any } },
+      ];
+
+      let leitura: { favorecido: string; valor: number; data: string; formaPagamento: string; banco: string; textoCompleto: string; palavrasChave: string[] } | null = null;
+      try {
+        const resp = await invokeLLM({ messages: [{ role: "user", content }] });
+        const rawContent = resp.choices?.[0]?.message?.content;
+        const raw = typeof rawContent === "string" ? rawContent : "";
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) leitura = JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        console.error("[lerComprovante] LLM error:", e);
+      }
+
+      if (!leitura) {
+        return { comprovanteUrl, leitura: null, sugestoes: [] };
+      }
+
+      // 4. Palavras-chave de transporte/logística para categoria frete
+      const PALAVRAS_FRETE = ["transport", "logística", "log", "frete", "carga", "caminhao", "caminhão", "carreta", "express", "cargo"];
+
+      // 5. Função de similaridade simples (normaliza e verifica inclusão)
+      function normalizar(s: string) {
+        return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").trim();
+      }
+      function score(a: string, b: string): number {
+        const na = normalizar(a); const nb = normalizar(b);
+        if (na === nb) return 1.0;
+        if (na.includes(nb) || nb.includes(na)) return 0.9;
+        const wordsA = na.split(" ").filter(Boolean);
+        const wordsB = nb.split(" ").filter(Boolean);
+        const common = wordsA.filter(w => wordsB.includes(w)).length;
+        return common / Math.max(wordsA.length, wordsB.length, 1);
+      }
+
+      const favComp = leitura.favorecido;
+      const palavrasComp = [...(leitura.palavrasChave ?? []), favComp].map(normalizar);
+
+      // 6. Para cada despesa aberta, calcular score de match
+      const sugestoes = abertas.map((d: any) => {
+        let matchScore = score(favComp, d.favorecido);
+
+        // Bonus: se categoria é frete e palavras do comprovante têm palavras de transporte
+        if (d.categoria === "frete" && PALAVRAS_FRETE.some(p => palavrasComp.some(pc => pc.includes(p)))) {
+          matchScore = Math.max(matchScore, 0.7);
+        }
+
+        // Bonus: valor muito próximo (dentro de 1%)
+        const valorComp = leitura!.valor;
+        const valorDesp = parseFloat(d.valor);
+        if (valorComp > 0 && valorDesp > 0) {
+          const diff = Math.abs(valorComp - valorDesp) / valorDesp;
+          if (diff < 0.01) matchScore = Math.min(1.0, matchScore + 0.2);
+          else if (diff < 0.05) matchScore = Math.min(1.0, matchScore + 0.1);
+        }
+
+        return {
+          despesaId: d.id,
+          categoria: d.categoria,
+          favorecido: d.favorecido,
+          valor: d.valor,
+          matchScore: Math.round(matchScore * 100),
+          autoVincular: matchScore >= 0.7,
+        };
+      }).sort((a: any, b: any) => b.matchScore - a.matchScore);
+
+      return { comprovanteUrl, leitura, sugestoes };
+    }),
+
+  /**
+   * Confirma a baixa de uma ou mais despesas com o comprovante já processado.
+   */
+  darBaixa: publicProcedure
+    .input(z.object({
+      despesaId: z.number(),
+      dataBaixa: z.string(),
+      comprovanteUrl: z.string().optional(),
+      comprovanteTexto: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await darBaixaDespesa({
+        id: input.despesaId,
+        dataBaixa: input.dataBaixa,
+        comprovanteUrl: input.comprovanteUrl,
+        comprovanteTexto: input.comprovanteTexto,
+      });
+      return { ok: true };
     }),
   }),
 });
