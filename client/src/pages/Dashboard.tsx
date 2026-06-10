@@ -57,6 +57,7 @@ export default function Dashboard() {
   const kpis = useMemo(() => {
     let totalPesoOrigem = 0;
     let totalValorCompra = 0;
+    let totalValorPagar = 0; // valorCompra - retencoes = o que realmente será pago ao produtor
     let totalValorVenda = 0;
     let totalFrete = 0;
     let totalComissao = 0;
@@ -95,6 +96,7 @@ export default function Dashboard() {
       });
 
       totalValorCompra += calc.valorCompra;
+      totalValorPagar += calc.valorPagar; // já descontadas as retenções
       totalValorVenda += calc.valorVenda;
       totalFrete += calc.frete;
       totalComissao += calc.comissao;
@@ -108,13 +110,17 @@ export default function Dashboard() {
     const custoOperacional = totalFrete + totalClassCusto + totalDesagio + totalPrejuQuebra;
     const lucroLiquido = lucroBruto - custoOperacional - totalComissao;
     const totalPago = pagamentos.reduce((a: number, p: any) => a + n(p.valor), 0);
-    const saldoLiquido = totalValorCompra - totalPago; // negativo = crédito com fornecedor
+    // Saldo a pagar = valor líquido ao produtor (já descontadas retenções) menos o que já foi pago
+    // As retenções (FETHAB, IAGRO, SENAR, FUNRURAL) são retidas pela TIME e recolhidas ao fisco,
+    // portanto NÃO entram no saldo a pagar ao produtor.
+    const saldoLiquido = totalValorPagar - totalPago; // negativo = crédito com fornecedor
     const saldoPendente = Math.max(0, saldoLiquido);
     const creditoFornecedor = Math.max(0, -saldoLiquido);
 
     return {
       totalPesoOrigem,
       totalValorCompra,
+      totalValorPagar,
       totalValorVenda,
       lucroBruto,
       custoOperacional,
@@ -224,10 +230,20 @@ export default function Dashboard() {
             <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/5 p-4 space-y-1">
               <p className="text-xs text-emerald-400 font-semibold">Crédito c/ Fornecedor</p>
               <p className="text-xl font-bold font-mono text-emerald-400">{brl(kpis.creditoFornecedor)}</p>
-              <p className="text-xs text-muted-foreground">Pagamento superior ao saldo</p>
+              <p className="text-xs text-muted-foreground">Pago acima do líquido ao produtor</p>
             </div>
           ) : (
-            <KpiCard label="Saldo a pagar" value={brl(kpis.saldoPendente)} trend={kpis.saldoPendente > 0 ? "down" : "up"} />
+            <div className={`rounded-xl border-2 p-4 space-y-1 ${
+              kpis.saldoPendente > 0 ? "border-amber-500/40 bg-amber-500/5" : "border-emerald-500/40 bg-emerald-500/5"
+            }`}>
+              <p className="text-xs text-muted-foreground">Saldo a pagar ao produtor</p>
+              <p className={`text-xl font-bold font-mono ${
+                kpis.saldoPendente > 0 ? "text-amber-400" : "text-emerald-400"
+              }`}>{brl(kpis.saldoPendente)}</p>
+              <p className="text-xs text-muted-foreground">
+                Líq. {brl(kpis.totalValorPagar)} − pago {brl(kpis.totalPago)}
+              </p>
+            </div>
           )}
           <KpiCard label="Cargas em trânsito" value={String(kpis.emAberto)} trend={kpis.emAberto > 0 ? "neutral" : "up"} />
           <KpiCard label="Cargas finalizadas" value={String(kpis.finalizadas)} trend="up" />

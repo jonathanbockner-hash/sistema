@@ -23,6 +23,8 @@ export default function Pagamentos() {
   const { data: compras = [] } = trpc.compras.list.useQuery();
   const { data: embarques = [] } = trpc.embarques.list.useQuery({});
   const { data: operacoes = [] } = trpc.operacoes.list.useQuery();
+  const { data: descargas = [] } = trpc.descargas.list.useQuery();
+  const { data: cfg } = trpc.config.get.useQuery();
 
   const save = trpc.pagamentos.save.useMutation({ onSuccess: () => { refetch(); setShowForm(false); setForm({ ...defaultForm }); toast.success("Pagamento registrado!"); } });
   const del = trpc.pagamentos.delete.useMutation({ onSuccess: () => { refetch(); toast.success("Pagamento removido."); } });
@@ -73,7 +75,42 @@ export default function Pagamentos() {
     const ems = embarques.filter(e => ops.some(o => o.id === e.operacaoId));
     const cc = compras.find(c => c.id === compraId);
     if (!cc) return 0;
-    return ems.reduce((acc, em) => acc + (Math.max(0, n(em.pesoOrigem)) / 60) * n(cc.precoSc), 0);
+    const cfgN = {
+      fethabRsTon: n(cfg?.fethabRsTon), iagroRsTon: n(cfg?.iagroRsTon),
+      senarPerc: n(cfg?.senarPerc), funruralPerc: n(cfg?.funruralPerc),
+      fundoMes: n(cfg?.fundoMes), dmais: n(cfg?.dmais ?? 2),
+    };
+    const flags = {
+      reterFethab: (cc as any).reterFethab !== false,
+      reterIagro: (cc as any).reterIagro !== false,
+      reterSenar: (cc as any).reterSenar !== false,
+      reterFunrural: (cc as any).reterFunrural !== false,
+    };
+    return ems.reduce((acc, em) => {
+      const desc = (descargas as any[]).find((d: any) => d.embarqueId === em.id);
+      if (em.status === "Finalizada" && desc) {
+        // Embarque finalizado: usa peso real da descarga
+        // valorPagar = valorCompra - retencoes (retenções não são pagas ao produtor)
+        const kgCompra = Math.max(0, n(desc.pesoDescarga));
+        const valorCompra = (kgCompra / 60) * n(cc.precoSc);
+        const toneladas = kgCompra / 1000;
+        const retFethab = flags.reterFethab ? toneladas * cfgN.fethabRsTon : 0;
+        const retIagro = flags.reterIagro ? toneladas * cfgN.iagroRsTon : 0;
+        const retSenar = flags.reterSenar ? valorCompra * cfgN.senarPerc / 100 : 0;
+        const retFun = flags.reterFunrural ? valorCompra * cfgN.funruralPerc / 100 : 0;
+        return acc + valorCompra - retFethab - retIagro - retSenar - retFun;
+      } else {
+        // Embarque não finalizado: estimativa pelo peso de origem sem retenções
+        const kgEst = Math.max(0, n(em.pesoOrigem));
+        const valorEst = (kgEst / 60) * n(cc.precoSc);
+        const toneladas = kgEst / 1000;
+        const retFethab = flags.reterFethab ? toneladas * cfgN.fethabRsTon : 0;
+        const retIagro = flags.reterIagro ? toneladas * cfgN.iagroRsTon : 0;
+        const retSenar = flags.reterSenar ? valorEst * cfgN.senarPerc / 100 : 0;
+        const retFun = flags.reterFunrural ? valorEst * cfgN.funruralPerc / 100 : 0;
+        return acc + valorEst - retFethab - retIagro - retSenar - retFun;
+      }
+    }, 0);
   }
 
   function calcTotalPago(compraId: number): number {
@@ -121,7 +158,7 @@ export default function Pagamentos() {
               </div>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total estimado</span>
+                  <span className="text-muted-foreground">Líquido ao produtor</span>
                   <span className="font-mono text-foreground">{brl(total)}</span>
                 </div>
                 <div className="flex justify-between">

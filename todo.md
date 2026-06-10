@@ -95,3 +95,6 @@
 
 ## Bug v7.2 — Select avulso mostrava embarques já descarregados
 - [x] Bug: listEmbarquesSemDescarga filtrava apenas por status != Finalizada, mas embarques com descarga registrada podiam ter status desatualizado. Corrigido para usar NOT EXISTS na tabela descargas — agora só aparecem embarques sem nenhum registro de descarga vinculado.
+
+## Bug v7.3 — Saldo a pagar misturava retenções
+- [x] Bug: Dashboard e Pagamentos usavam totalValorCompra (bruto) como base do saldo a pagar ao produtor. As retenções (FETHAB, IAGRO, SENAR, FUNRURAL) eram retidas pela TIME mas ainda contavam no saldo, inflando o valor a pagar. Corrigido para usar totalValorPagar (valorCompra - retencoes) como base. Dashboard mostra legenda "Líq. R$X − pago R$Y". Pagamentos.tsx também corrigido com calcValorTotalCompra descontando retenções por embarque (usando peso real da descarga quando finalizado).
