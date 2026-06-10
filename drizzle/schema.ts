@@ -30,9 +30,9 @@ export const config = mysqlTable("config", {
   fundoMes: decimal("fundoMes", { precision: 10, scale: 4 }).default("2.5").notNull(),
   dmais: int("dmais").default(2).notNull(),
   fethabRsTon: decimal("fethabRsTon", { precision: 10, scale: 4 }).default("48.7000").notNull(),
-  iagroRsTon: decimal("iagroRsTon", { precision: 10, scale: 4 }).default("0.0000").notNull(),
-  senarPerc: decimal("senarPerc", { precision: 10, scale: 4 }).default("0.0000").notNull(),
-  funruralPerc: decimal("funruralPerc", { precision: 10, scale: 4 }).default("1.6300").notNull(),
+  iagroRsTon: decimal("iagroRsTon", { precision: 10, scale: 4 }).default("2.8000").notNull(),  // IAGRO Soja MT — independente do FETHAB
+  senarPerc: decimal("senarPerc", { precision: 10, scale: 4 }).default("0.2000").notNull(),     // SENAR — independente do FUNRURAL
+  funruralPerc: decimal("funruralPerc", { precision: 10, scale: 4 }).default("1.4300").notNull(), // FUNRURAL PF (INSS+RAT) — SENAR é separado
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 

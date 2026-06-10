@@ -11,9 +11,9 @@ export default function Configuracoes() {
     fundoMes: 2.5,
     dmais: 2,
     fethabRsTon: 48.70,
-    iagroRsTon: 0.00,
-    senarPerc: 0.00,
-    funruralPerc: 1.63,
+    iagroRsTon: 2.80,   // IAGRO Soja MT — independente do FETHAB
+    senarPerc: 0.20,    // SENAR — independente do FUNRURAL
+    funruralPerc: 1.43, // FUNRURAL PF (INSS 1,32% + RAT 0,11%) — SENAR é separado
   });
 
   const { data: cfg, refetch } = trpc.config.get.useQuery();
@@ -59,14 +59,13 @@ export default function Configuracoes() {
         description="Parâmetros fiscais e financeiros aplicados automaticamente em todos os cálculos"
       />
 
-      {/* Aviso sobre dupla contagem SENAR/FUNRURAL */}
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex gap-3">
-        <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
-        <div className="text-xs text-amber-200/80 leading-relaxed space-y-1">
-          <p className="font-semibold text-amber-300">Atenção: evite dupla contagem SENAR + FUNRURAL</p>
-          <p>Para <strong>produtor Pessoa Física</strong>: use FUNRURAL = 1,63% e SENAR = 0%. O SENAR (0,20%) já está incluso no FUNRURAL PF desde abr/2026 (LC 224/2025).</p>
-          <p>Para <strong>produtor Pessoa Jurídica</strong>: use FUNRURAL = 2,23% e SENAR = 0%. O SENAR (0,25%) também já está incluso.</p>
-          <p>Use SENAR separado (0,20%) apenas quando <strong>não</strong> houver FUNRURAL (ex: produtor isento).</p>
+      {/* Aviso sobre retenções independentes */}
+      <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex gap-3">
+        <Info size={16} className="text-primary shrink-0 mt-0.5" />
+        <div className="text-xs text-muted-foreground leading-relaxed space-y-1">
+          <p className="font-semibold text-foreground">Cada retenção é calculada e retida de forma independente</p>
+          <p><strong className="text-foreground">IAGRO é separado do FETHAB</strong>: configure ambos individualmente. Para soja MT, FETHAB = R$ 48,70/ton e IAGRO = R$ 2,80/ton.</p>
+          <p><strong className="text-foreground">SENAR é separado do FUNRURAL</strong>: configure e retenha ambos. SENAR = 0,20% e FUNRURAL PF = 1,43% (INSS 1,32% + RAT 0,11%).</p>
         </div>
       </div>
 
@@ -80,7 +79,7 @@ export default function Configuracoes() {
           <div className="rounded-lg bg-muted/20 border border-border/40 p-3 text-xs text-muted-foreground space-y-1">
             <p><strong className="text-foreground">FETHAB Soja MT</strong>: 20% da UPF-MT por tonelada. UPF-MT 1º sem/2026 = R$ 243,49 → <strong className="text-primary">R$ 48,70/ton</strong></p>
             <p><strong className="text-foreground">FETHAB Milho MT</strong>: 6% da UPF-MT por tonelada (interestaduais/exportação) → <strong className="text-primary">R$ 14,61/ton</strong></p>
-            <p><strong className="text-foreground">IAGRO Soja MT</strong>: 1,15% UPF/ton = R$ 2,80/ton. Para soja MT, já está incluso no FETHAB acima (use 0 para evitar dupla contagem).</p>
+            <p><strong className="text-foreground">IAGRO Soja MT</strong>: retenção <strong className="text-primary">independente</strong> do FETHAB. 1,15% UPF/ton = <strong className="text-primary">R$ 2,80/ton</strong> (1º sem/2026). Configure sempre separado.</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="FETHAB (R$/ton)" required>
@@ -89,7 +88,7 @@ export default function Configuracoes() {
             </Field>
             <Field label="IAGRO (R$/ton)" required>
               <input className={inputCls} type="number" step="0.0001" value={form.iagroRsTon || ""} onChange={e => set("iagroRsTon", Number(e.target.value))} />
-              <p className="text-xs text-muted-foreground mt-1">Soja MT: usar 0 (já incluso no FETHAB)</p>
+              <p className="text-xs text-muted-foreground mt-1">Soja MT: R$ 2,80/ton | Independente do FETHAB</p>
             </Field>
           </div>
         </div>
@@ -101,18 +100,18 @@ export default function Configuracoes() {
             <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">% sobre valor bruto</span>
           </div>
           <div className="rounded-lg bg-muted/20 border border-border/40 p-3 text-xs text-muted-foreground space-y-1">
-            <p><strong className="text-foreground">FUNRURAL PF</strong>: 1,63% (INSS Rural 1,32% + RAT 0,11% + SENAR 0,20%) — vigente a partir de abr/2026 (LC 224/2025)</p>
-            <p><strong className="text-foreground">FUNRURAL PJ</strong>: 2,23% (Funrural+RAT 1,98% + SENAR 0,25%)</p>
-            <p><strong className="text-foreground">SENAR isolado</strong>: 0,20% — usar apenas quando não houver FUNRURAL</p>
+            <p><strong className="text-foreground">FUNRURAL PF</strong>: 1,43% (INSS Rural 1,32% + RAT 0,11%) — vigente a partir de abr/2026 (LC 224/2025)</p>
+            <p><strong className="text-foreground">FUNRURAL PJ</strong>: 1,98% (Funrural+RAT)</p>
+            <p><strong className="text-foreground">SENAR</strong>: 0,20% — retenção <strong className="text-primary">independente</strong> do FUNRURAL. Configure sempre separado.</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="FUNRURAL (% sobre valor bruto)" required>
               <input className={inputCls} type="number" step="0.0001" value={form.funruralPerc || ""} onChange={e => set("funruralPerc", Number(e.target.value))} />
-              <p className="text-xs text-muted-foreground mt-1">PF: 1,63% | PJ: 2,23% | Isento: 0%</p>
+              <p className="text-xs text-muted-foreground mt-1">PF: 1,43% | PJ: 1,98% | Isento: 0%</p>
             </Field>
             <Field label="SENAR (% sobre valor bruto)" required>
               <input className={inputCls} type="number" step="0.0001" value={form.senarPerc || ""} onChange={e => set("senarPerc", Number(e.target.value))} />
-              <p className="text-xs text-muted-foreground mt-1">0% quando FUNRURAL &gt; 0 (já incluso)</p>
+              <p className="text-xs text-muted-foreground mt-1">0,20% — sempre separado do FUNRURAL</p>
             </Field>
           </div>
         </div>
