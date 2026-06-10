@@ -131,8 +131,8 @@
 - [x] Valor calculado automaticamente para Comissão e Classificador ao selecionar operação
 
 ## Baixa Consolidada Global v2
-- [ ] Refatorar procedure `despesas.saldoConsolidado`: agrupa despesas em aberto por favorecido+categoria, retorna saldo total por grupo
-- [ ] Refatorar procedure `despesas.lerComprovante`: retorna favorecido+valor extraído pelo LLM para cruzar com saldos consolidados
-- [ ] Criar procedure `despesas.darBaixaConsolidada`: recebe favorecido+categoria+operacaoId+valor+comprovante, marca todas as despesas em aberto daquele grupo como pagas até cobrir o valor
-- [ ] Reescrever tela BaixaDespesas.tsx: painel de saldos em aberto por favorecido/categoria, upload de comprovante, leitura IA, vinculação ao saldo do favorecido reconhecido, confirmação e baixa
-- [ ] Remover fluxo nota a nota (seleção individual de despesa)
+- [x] Refatorar procedure `despesas.saldoConsolidado`: agrupa despesas em aberto por favorecido+categoria, retorna saldo total por grupo
+- [x] Refatorar procedure `despesas.lerComprovante`: retorna favorecido+valor extraído pelo LLM para cruzar com saldos consolidados
+- [x] Criar procedure `despesas.darBaixaConsolidada`: recebe favorecido+categoria+operacaoId+valor+comprovante, marca todas as despesas em aberto daquele grupo como pagas até cobrir o valor
+- [x] Reescrever tela BaixaDespesas.tsx: painel de saldos em aberto por favorecido/categoria, upload de comprovante, leitura IA, vinculação ao saldo do favorecido reconhecido, confirmação e baixa
+- [x] Remover fluxo nota a nota (seleção individual de despesa)

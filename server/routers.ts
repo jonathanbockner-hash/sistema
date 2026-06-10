@@ -614,6 +614,7 @@ export const appRouter = router({
       categoria: z.enum(["comissao","fethab","iagro","senar","funrural","classificador","frete","outro"]),
       favorecido: z.string(),
       dataBaixa: z.string(),
+      valorComprovante: z.number().optional(), // valor extraído do comprovante para baixa parcial
       comprovanteUrl: z.string().optional(),
       comprovanteTexto: z.string().optional(),
     }))

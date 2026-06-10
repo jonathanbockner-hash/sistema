@@ -126,10 +126,19 @@ export default function BaixaDespesas() {
           categoria: saldo.categoria,
           favorecido: saldo.favorecido,
           dataBaixa,
+          valorComprovante: leitura?.valor ?? undefined,
           comprovanteUrl: comprovanteUrl ?? undefined,
           comprovanteTexto: textoCompleto ?? undefined,
-        });
-        ok += (result as any).baixadas ?? 1;
+        }) as any;
+        ok += result.baixadas ?? 1;
+        // Aviso de baixa parcial
+        if (result.saldoRemanescente > 0.01) {
+          toast.warning(
+            `Baixa parcial: ${CAT_LABELS[saldo.categoria] ?? saldo.categoria} — ${saldo.favorecido}. ` +
+            `Quitado R$ ${result.totalBaixado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} | ` +
+            `Saldo remanescente: R$ ${result.saldoRemanescente.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+          );
+        }
       } catch (err: any) {
         toast.error(`Erro ao dar baixa em ${CAT_LABELS[saldo.categoria] ?? saldo.categoria} — ${saldo.favorecido}: ${err?.message}`);
       }

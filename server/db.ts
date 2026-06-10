@@ -541,19 +541,23 @@ export async function saldoConsolidadoDespesas(operacaoId: number) {
   return Array.from(mapa.values()).sort((a, b) => b.saldoAberto - a.saldoAberto);
 }
 
-/** Dá baixa consolidada em todas as despesas em aberto de um grupo (favorecido+categoria) */
+/** Dá baixa consolidada em despesas em aberto de um grupo (favorecido+categoria).
+ * Se valorComprovante for informado, aplica baixa parcial (marca despesas até cobrir o valor).
+ * Se não informado, quita todas as despesas em aberto do grupo.
+ */
 export async function darBaixaConsolidada(data: {
   operacaoId: number;
   categoria: string;
   favorecido: string;
   dataBaixa: string;
+  valorComprovante?: number;
   comprovanteUrl?: string | null;
   comprovanteTexto?: string | null;
 }) {
   const db = await getDb();
-  if (!db) return { baixadas: 0 };
+  if (!db) return { baixadas: 0, totalBaixado: 0, saldoRemanescente: 0 };
 
-  // Busca todas as despesas em aberto do grupo
+  // Busca todas as despesas em aberto do grupo ordenadas por data de criação (FIFO)
   const abertas = await db.select().from(despesasOperacionais).where(
     and(
       eq(despesasOperacionais.operacaoId, data.operacaoId),
@@ -564,23 +568,50 @@ export async function darBaixaConsolidada(data: {
 
   // Filtra pelo favorecido (normalizado)
   const normFav = data.favorecido.toLowerCase().trim();
-  const doGrupo = abertas.filter(d =>
-    d.favorecido.toLowerCase().trim() === normFav
-  );
+  const doGrupo = abertas
+    .filter(d => d.favorecido.toLowerCase().trim() === normFav)
+    .sort((a, b) => Number(a.id) - Number(b.id)); // FIFO
 
-  if (doGrupo.length === 0) return { baixadas: 0 };
+  if (doGrupo.length === 0) return { baixadas: 0, totalBaixado: 0, saldoRemanescente: 0 };
 
-  // Atualiza todas como pagas
-  const ids = doGrupo.map(d => d.id);
-  for (const id of ids) {
-    await db.update(despesasOperacionais).set({
-      pago: true,
-      dataBaixa: new Date(data.dataBaixa),
-      comprovanteUrl: data.comprovanteUrl ?? null,
-      comprovanteTexto: data.comprovanteTexto ?? null,
-      updatedAt: new Date(),
-    }).where(eq(despesasOperacionais.id, id));
+  const saldoTotal = doGrupo.reduce((acc, d) => acc + parseFloat(String(d.valor)), 0);
+
+  // Se valorComprovante não informado ou cobre tudo: quita todas
+  if (!data.valorComprovante || data.valorComprovante >= saldoTotal * 0.999) {
+    for (const d of doGrupo) {
+      await db.update(despesasOperacionais).set({
+        pago: true,
+        dataBaixa: new Date(data.dataBaixa),
+        comprovanteUrl: data.comprovanteUrl ?? null,
+        comprovanteTexto: data.comprovanteTexto ?? null,
+        updatedAt: new Date(),
+      }).where(eq(despesasOperacionais.id, d.id));
+    }
+    return { baixadas: doGrupo.length, totalBaixado: saldoTotal, saldoRemanescente: 0 };
   }
 
-  return { baixadas: ids.length };
+  // Baixa parcial: marca despesas FIFO até cobrir valorComprovante
+  let restante = data.valorComprovante;
+  let baixadas = 0;
+  let totalBaixado = 0;
+  for (const d of doGrupo) {
+    if (restante <= 0) break;
+    const valor = parseFloat(String(d.valor));
+    if (valor <= restante + 0.01) {
+      // Quita esta despesa inteiramente
+      await db.update(despesasOperacionais).set({
+        pago: true,
+        dataBaixa: new Date(data.dataBaixa),
+        comprovanteUrl: data.comprovanteUrl ?? null,
+        comprovanteTexto: data.comprovanteTexto ?? null,
+        updatedAt: new Date(),
+      }).where(eq(despesasOperacionais.id, d.id));
+      restante -= valor;
+      totalBaixado += valor;
+      baixadas++;
+    }
+    // Despesa maior que o restante: não quita parcialmente (mantém em aberto)
+  }
+
+  return { baixadas, totalBaixado, saldoRemanescente: saldoTotal - totalBaixado };
 }
