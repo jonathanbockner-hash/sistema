@@ -121,3 +121,11 @@
 - [x] Criar tela "Baixa de Despesas" com: seleção de operação, upload de comprovante, preview da leitura LLM, sugestão de vinculação automática, botão de confirmação
 - [x] Lógica de matching: favorecido do comprovante vs. nome do classificador/corretor cadastrado (fuzzy match), palavras-chave de transporte/logística para categoria frete
 - [x] Testes: 48 testes passando, TypeScript limpo
+
+## Melhorias Despesas/Baixa v8
+- [ ] Segurança: converter procedures despesas.* de publicProcedure para protectedProcedure
+- [ ] Pré-preenchimento: ao selecionar categoria Comissão/Classificador, buscar nome e valor estimado da operação
+- [ ] Matching inteligente: lerComprovante cruzar com nomes de corretores/classificadores cadastrados
+- [ ] Status pago/aberto na tabela de Despesas Operacionais (badge verde/vermelho)
+- [ ] Migration: sincronizar colunas pago/dataBaixa/comprovanteTexto no arquivo SQL
+- [ ] Valor calculado automaticamente para Comissão e Classificador ao selecionar operação

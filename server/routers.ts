@@ -2,7 +2,7 @@ import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
 import { storagePut, storageGetSignedUrl } from "./storage";
@@ -199,6 +199,14 @@ export const appRouter = router({
       obs: z.string().optional(),
     })).mutation(({ input }) => upsertOperacao(input)),
     delete: publicProcedure.input(z.object({ id: z.number() })).mutation(({ input }) => deleteOperacao(input.id)),
+    /** Retorna operação com corretor e classificador para pré-preenchimento de despesas */
+    getDetalhes: publicProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+      const op = await getOperacao(input.id);
+      if (!op) return null;
+      const corretor = op.corretorId ? await getCorretor(op.corretorId) : null;
+      const classificador = op.classificadorId ? await getClassificador(op.classificadorId) : null;
+      return { ...op, corretor, classificador };
+    }),
   }),
 
   // ─── Notas Fiscais (extração via LLM) ─────────────────────────────────────
@@ -440,13 +448,13 @@ export const appRouter = router({
 
   // ─── Despesas Operacionais ──────────────────────────────────────────────────────────────
   despesas: router({
-  list: publicProcedure
+  list: protectedProcedure
     .input(z.object({ operacaoId: z.number().optional() }))
     .query(async ({ input }) => {
       return listDespesas(input.operacaoId);
     }),
 
-  save: publicProcedure
+  save: protectedProcedure
     .input(z.object({
       id: z.number().optional(),
       operacaoId: z.number(),
@@ -464,14 +472,14 @@ export const appRouter = router({
       return { id };
     }),
 
-  delete: publicProcedure
+  delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await deleteDespesa(input.id);
       return { ok: true };
     }),
 
-  uploadComprovante: publicProcedure
+  uploadComprovante: protectedProcedure
     .input(z.object({ base64: z.string(), mimeType: z.string() }))
     .mutation(async ({ input }) => {
       const buf = Buffer.from(input.base64, "base64");
@@ -485,7 +493,7 @@ export const appRouter = router({
    * Usa LLM para extrair: favorecido, valor, data, forma de pagamento.
    * Cruza com as despesas em aberto e retorna sugestões de vinculação.
    */
-  lerComprovante: publicProcedure
+  lerComprovante: protectedProcedure
     .input(z.object({
       base64: z.string(),
       mimeType: z.string(),
@@ -497,9 +505,12 @@ export const appRouter = router({
       const key = `despesas-comprovantes/${Date.now()}.${input.mimeType.includes("pdf") ? "pdf" : "jpg"}`;
       const { url: comprovanteUrl } = await storagePut(key, buf, input.mimeType);
 
-      // 2. Buscar despesas em aberto da operação
+      // 2. Buscar despesas em aberto da operação + dados da operação (corretor/classificador)
       const despesasAbertas = await listDespesas(input.operacaoId);
       const abertas = despesasAbertas.filter((d: any) => !d.pago);
+      const op = await getOperacao(input.operacaoId);
+      const corretorOp = op?.corretorId ? await getCorretor(op.corretorId) : null;
+      const classificadorOp = op?.classificadorId ? await getClassificador(op.classificadorId) : null;
 
       // 3. Extrair dados do comprovante via LLM
       const isImage = input.mimeType.startsWith("image/");
@@ -552,6 +563,14 @@ export const appRouter = router({
       const sugestoes = abertas.map((d: any) => {
         let matchScore = score(favComp, d.favorecido);
 
+        // Bonus extra: cruzar com nome do corretor/classificador cadastrado na operação
+        if (d.categoria === "comissao" && corretorOp) {
+          matchScore = Math.max(matchScore, score(favComp, corretorOp.nome));
+        }
+        if (d.categoria === "classificador" && classificadorOp) {
+          matchScore = Math.max(matchScore, score(favComp, classificadorOp.nome));
+        }
+
         // Bonus: se categoria é frete e palavras do comprovante têm palavras de transporte
         if (d.categoria === "frete" && PALAVRAS_FRETE.some(p => palavrasComp.some(pc => pc.includes(p)))) {
           matchScore = Math.max(matchScore, 0.7);
@@ -582,7 +601,7 @@ export const appRouter = router({
   /**
    * Confirma a baixa de uma ou mais despesas com o comprovante já processado.
    */
-  darBaixa: publicProcedure
+  darBaixa: protectedProcedure
     .input(z.object({
       despesaId: z.number(),
       dataBaixa: z.string(),

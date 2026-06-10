@@ -198,7 +198,7 @@ export default function BaixaDespesas() {
             <SelectContent>
               {(operacoes as any[]).map((op: any) => (
                 <SelectItem key={op.id} value={String(op.id)}>
-                  {op.codigo} — {op.produto}
+                  {op.sigla}
                 </SelectItem>
               ))}
             </SelectContent>
