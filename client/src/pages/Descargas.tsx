@@ -35,10 +35,13 @@ export default function Descargas() {
   const ticketRef = useRef<HTMLInputElement>(null);
 
   // Busca TODOS os embarques sem descarga finalizada (inclui Em trânsito e Descarga pendente)
+  // embarquesSemDescarga: apenas os não finalizados (usados na lista e no select avulso)
   const { data: embarquesSemDescarga = [], refetch: refetchEmbarques } = trpc.embarques.listSemDescarga.useQuery(
     filtroOp ? { operacaoId: filtroOp as number } : {}
   );
-  // Também busca todos para o preview de cálculo
+  // embarquesSemDescargaTodos: sem filtro de operação, para o select avulso quando nenhuma opção está selecionada
+  const { data: embarquesSemDescargaTodos = [], refetch: refetchTodos } = trpc.embarques.listSemDescarga.useQuery({});
+  // todosEmbarques: todos (incluindo finalizados) — usado apenas para buscar dados do embarque selecionado no preview
   const { data: todosEmbarques = [] } = trpc.embarques.list.useQuery({});
   const { data: operacoes = [] } = trpc.operacoes.list.useQuery();
   const { data: compras = [] } = trpc.compras.list.useQuery();
@@ -53,6 +56,7 @@ export default function Descargas() {
   const save = trpc.descargas.save.useMutation({
     onSuccess: () => {
       refetchEmbarques();
+      refetchTodos();
       setSheetOpen(false);
       setSelectedEmbarqueId(null);
       setForm({ ...defaultForm });
@@ -74,7 +78,7 @@ export default function Descargas() {
   // Usa diretamente os embarques sem descarga retornados pelo backend
   const embarquesFiltrados = embarquesSemDescarga;
 
-  const selectedEmbarque = todosEmbarques.find(e => e.id === selectedEmbarqueId) ?? embarquesSemDescarga.find(e => e.id === selectedEmbarqueId);
+  const selectedEmbarque = embarquesSemDescargaTodos.find(e => e.id === selectedEmbarqueId) ?? embarquesSemDescarga.find(e => e.id === selectedEmbarqueId) ?? todosEmbarques.find(e => e.id === selectedEmbarqueId);
   const selectedOp = operacoes.find(o => o.id === selectedEmbarque?.operacaoId);
   const selectedCompra = compras.find(c => c.id === selectedOp?.compraId);
   const selectedVenda = vendas.find(v => v.id === selectedOp?.vendaId);
@@ -82,7 +86,7 @@ export default function Descargas() {
   // Preenche o formulário quando descargaExistente carrega (evita estado stale)
   useEffect(() => {
     if (!selectedEmbarqueId || loadingDescarga) return;
-    const em = todosEmbarques.find(e => e.id === selectedEmbarqueId) ?? embarquesSemDescarga.find(e => e.id === selectedEmbarqueId);
+    const em = embarquesSemDescargaTodos.find(e => e.id === selectedEmbarqueId) ?? embarquesSemDescarga.find(e => e.id === selectedEmbarqueId) ?? todosEmbarques.find(e => e.id === selectedEmbarqueId);
     if (!em) return;
     setForm({
       ...defaultForm,
@@ -400,7 +404,7 @@ export default function Descargas() {
                       value={form.embarqueId || ""}
                       onChange={e => {
                         const id = Number(e.target.value);
-                        const em = todosEmbarques.find(x => x.id === id) ?? embarquesSemDescarga.find(x => x.id === id);
+                        const em = embarquesSemDescargaTodos.find(x => x.id === id) ?? embarquesSemDescarga.find(x => x.id === id);
                         if (em) {
                           setSelectedEmbarqueId(id);
                           setForm(f => ({ ...f, embarqueId: id, placa: em.placa ?? "", nfeSaida: em.nfeSaida ?? "" }));
@@ -408,7 +412,10 @@ export default function Descargas() {
                       }}
                     >
                       <option value="">Selecione um embarque...</option>
-                      {(filtroOp ? todosEmbarques.filter(e => e.operacaoId === filtroOp) : todosEmbarques).map(e => {
+                      {(filtroOp
+                        ? embarquesSemDescargaTodos.filter(e => e.operacaoId === filtroOp)
+                        : embarquesSemDescargaTodos
+                      ).map(e => {
                         const op = operacoes.find(o => o.id === e.operacaoId);
                         return <option key={e.id} value={e.id}>{op?.sigla} — {e.placa || "sem placa"} — {e.nfeSaida || "sem NF"}</option>;
                       })}

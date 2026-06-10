@@ -89,3 +89,6 @@
 - [x] Bug: Relatórios.tsx tem nome de empresa hardcoded "JD COMERCIO DE IMPORTACAO E EXPORTACAO LTDA" — deve ser "TIME Agri Business"
 - [x] Bug: Saldo a pagar em Pagamentos.tsx usa Math.max(0, ...) escondendo crédito com fornecedor (inconsistente com Dashboard/Relatórios)
 - [x] Bug: ContratosVenda.tsx não tem campo "outro" na finalidadeVenda mas o schema aceita — opção faltando no select
+
+## Bug v7.1 — Baixa automática na descarga
+- [x] Bug: Modo avulso em Descargas.tsx usava `todosEmbarques` (incluindo finalizados) no select de embarque — após salvar descarga, o caminhão continuava aparecendo na lista para novo lançamento. Corrigido para usar `embarquesSemDescargaTodos` (query sem filtro de operação, mas excluindo status Finalizada) e refetch desta query no onSuccess.
