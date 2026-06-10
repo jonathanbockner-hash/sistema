@@ -147,6 +147,68 @@ export default function DespesasOperacionais() {
       }));
       setAutoPreenchido(true);
 
+    } else if (cat === "fethab") {
+      const valorEst: number = op.valorEstFethab ?? 0;
+      const pesoInfo = (op.pesoTotalDescargaTon ?? 0) > 0
+        ? ` (${Number(op.pesoTotalDescargaTon).toFixed(3)} ton)`
+        : (op.pesoTotalOrigTon ?? 0) > 0
+        ? ` (${Number(op.pesoTotalOrigTon).toFixed(3)} ton estimadas)`
+        : "";
+      setForm(f => ({
+        ...f,
+        favorecido: f.favorecido || "SEFAZ-MT",
+        valor: f.valor || (valorEst > 0 ? String(valorEst.toFixed(2)) : ""),
+        descricao: f.descricao || `FETHAB — ${op.sigla}${pesoInfo}`,
+      }));
+      setAutoPreenchido(valorEst > 0);
+
+    } else if (cat === "iagro") {
+      const valorEst: number = op.valorEstIagro ?? 0;
+      const pesoInfo = (op.pesoTotalDescargaTon ?? 0) > 0
+        ? ` (${Number(op.pesoTotalDescargaTon).toFixed(3)} ton)`
+        : (op.pesoTotalOrigTon ?? 0) > 0
+        ? ` (${Number(op.pesoTotalOrigTon).toFixed(3)} ton estimadas)`
+        : "";
+      setForm(f => ({
+        ...f,
+        favorecido: f.favorecido || "IAGRO",
+        valor: f.valor || (valorEst > 0 ? String(valorEst.toFixed(2)) : ""),
+        descricao: f.descricao || `IAGRO — ${op.sigla}${pesoInfo}`,
+      }));
+      setAutoPreenchido(valorEst > 0);
+
+    } else if (cat === "senar") {
+      const valorEst: number = op.valorEstSenar ?? 0;
+      setForm(f => ({
+        ...f,
+        favorecido: f.favorecido || "SENAR",
+        valor: f.valor || (valorEst > 0 ? String(valorEst.toFixed(2)) : ""),
+        descricao: f.descricao || `SENAR — ${op.sigla}`,
+      }));
+      setAutoPreenchido(valorEst > 0);
+
+    } else if (cat === "funrural") {
+      const valorEst: number = op.valorEstFunrural ?? 0;
+      setForm(f => ({
+        ...f,
+        favorecido: f.favorecido || "Receita Federal",
+        valor: f.valor || (valorEst > 0 ? String(valorEst.toFixed(2)) : ""),
+        descricao: f.descricao || `FUNRURAL — ${op.sigla}`,
+      }));
+      setAutoPreenchido(valorEst > 0);
+
+    } else if (cat === "frete") {
+      const valorEst: number = op.valorEstFrete ?? 0;
+      // Usar nome da transportadora se disponível (campo livre na operação)
+      const transportadora = (op as any).transportadora || "";
+      setForm(f => ({
+        ...f,
+        favorecido: f.favorecido || transportadora,
+        valor: f.valor || (valorEst > 0 ? String(valorEst.toFixed(2)) : ""),
+        descricao: f.descricao || `Frete — ${op.sigla}`,
+      }));
+      setAutoPreenchido(valorEst > 0);
+
     } else {
       setAutoPreenchido(false);
     }

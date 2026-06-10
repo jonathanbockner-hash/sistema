@@ -136,3 +136,9 @@
 - [x] Criar procedure `despesas.darBaixaConsolidada`: recebe favorecido+categoria+operacaoId+valor+comprovante, marca todas as despesas em aberto daquele grupo como pagas até cobrir o valor
 - [x] Reescrever tela BaixaDespesas.tsx: painel de saldos em aberto por favorecido/categoria, upload de comprovante, leitura IA, vinculação ao saldo do favorecido reconhecido, confirmação e baixa
 - [x] Remover fluxo nota a nota (seleção individual de despesa)
+
+## Auditoria End-to-End v8
+- [x] Bug: ContratosCompra.tsx descreve IAGRO como "já incluso no FETHAB" e SENAR como "incluso no FUNRURAL" — textos errados (corrigido na sessão anterior)
+- [x] Bug: DespesasOperacionais.tsx não pré-preenche FETHAB, IAGRO, SENAR, FUNRURAL e Frete — só Comissão e Classificador têm automação
+- [x] Bug: BaixaDespesas.tsx — seleção de múltiplos grupos envia o mesmo valorComprovante para cada baixa (overpayment potencial)
+- [ ] Bug: Procedures de contratos, embarques, descargas, pagamentos e config usam publicProcedure — sem proteção de autenticação (pendente — decisão de escopo)

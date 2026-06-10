@@ -167,13 +167,13 @@ export default function ContratosCompra() {
                   checked={form.reterIagro}
                   onChange={v => set("reterIagro", v)}
                   label="IAGRO"
-                  desc="R$/ton — já incluso no FETHAB soja MT"
+                  desc="R$/ton — retenção independente do FETHAB"
                 />
                 <ToggleSwitch
                   checked={form.reterSenar}
                   onChange={v => set("reterSenar", v)}
                   label="SENAR"
-                  desc="0,20% — incluso no FUNRURAL PF"
+                  desc="0,20% sobre valor bruto — retenção independente do FUNRURAL"
                 />
               </div>
             </FormSection>

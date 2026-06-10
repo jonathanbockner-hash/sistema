@@ -116,17 +116,41 @@ export default function BaixaDespesas() {
     const textoCompleto = leitura?.textoCompleto ?? null;
     let ok = 0;
 
-    for (const chave of Array.from(selecionados)) {
-      // Encontrar o saldo correspondente
-      const saldo = sugestoes.find((s: any) => s.chave === chave);
-      if (!saldo) continue;
+    // Calcular distribuição proporcional do valor do comprovante entre os grupos selecionados
+    // Evita que um único comprovante pague múltiplos grupos pelo valor total
+    const gruposSelecionados = Array.from(selecionados)
+      .map(chave => sugestoes.find((s: any) => s.chave === chave))
+      .filter(Boolean) as any[];
+
+    const totalSaldoSelecionado = gruposSelecionados.reduce((acc, s) => acc + (s.saldoAberto ?? 0), 0);
+    const valorComprovante = leitura?.valor ?? undefined;
+
+    // Segurança: se há múltiplos grupos e o valor do comprovante não foi extraído,
+    // não permitir baixa automática (evitar quitar integralmente cada grupo)
+    if (valorComprovante === undefined && gruposSelecionados.length > 1) {
+      toast.error(
+        "O valor do comprovante não foi extraído pela IA. " +
+        "Para baixa de múltiplos grupos, o valor é obrigatório para distribuição proporcional. " +
+        "Selecione apenas um grupo por vez ou re-envie um comprovante com valor legível."
+      );
+      return;
+    }
+
+    for (const saldo of gruposSelecionados) {
+      // Distribuir o valor do comprovante proporcionalmente ao saldo de cada grupo
+      let valorProporcional: number | undefined = undefined;
+      if (valorComprovante !== undefined && totalSaldoSelecionado > 0) {
+        const proporcao = (saldo.saldoAberto ?? 0) / totalSaldoSelecionado;
+        valorProporcional = valorComprovante * proporcao;
+      }
+
       try {
         const result = await darBaixaMut.mutateAsync({
           operacaoId: operacaoId!,
           categoria: saldo.categoria,
           favorecido: saldo.favorecido,
           dataBaixa,
-          valorComprovante: leitura?.valor ?? undefined,
+          valorComprovante: valorProporcional,
           comprovanteUrl: comprovanteUrl ?? undefined,
           comprovanteTexto: textoCompleto ?? undefined,
         }) as any;

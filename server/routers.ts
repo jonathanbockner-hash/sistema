@@ -256,6 +256,45 @@ export const appRouter = router({
       const custoClassTonNum = parseFloat(String(op.custoClassTon ?? 0));
       const valorEstClassificador = pesoRef > 0 ? custoClassTonNum * pesoRef : 0;
 
+      // Buscar config para calcular FETHAB/IAGRO/SENAR/FUNRURAL
+      let valorEstFethab = 0;
+      let valorEstIagro = 0;
+      let valorEstSenar = 0;
+      let valorEstFunrural = 0;
+      let valorEstFrete = 0;
+      try {
+        const cfg = await getConfig();
+        const contrato = op.compraId ? await getContratoCompra(op.compraId) : null;
+        // Buscar valor total de compra para base de SENAR/FUNRURAL
+        // Usar pesoRef * precoCompra como aproximação do valor bruto
+        const precoCompra = parseFloat(String(contrato?.precoSc ?? 0));
+        const sacasRef = pesoRef * 1000 / 60;
+        const valorBrutoEst = precoCompra * sacasRef;
+
+        if (contrato?.reterFethab && pesoRef > 0) {
+          // FETHAB = base + adicional; config armazena apenas fethabRsTon (R$/ton total)
+          const fethab = parseFloat(String(cfg?.fethabRsTon ?? 24.349));
+          valorEstFethab = pesoRef * fethab;
+        }
+        if (contrato?.reterIagro && pesoRef > 0) {
+          const iagroRsTon = parseFloat(String(cfg?.iagroRsTon ?? 2.80));
+          valorEstIagro = pesoRef * iagroRsTon;
+        }
+        if (contrato?.reterSenar && valorBrutoEst > 0) {
+          const senarPerc = parseFloat(String(cfg?.senarPerc ?? 0.20)) / 100;
+          valorEstSenar = valorBrutoEst * senarPerc;
+        }
+        if (contrato?.reterFunrural && valorBrutoEst > 0) {
+          const funruralPerc = parseFloat(String(cfg?.funruralPerc ?? 1.43)) / 100;
+          valorEstFunrural = valorBrutoEst * funruralPerc;
+        }
+        // Frete: freteTon (R$/ton) é o campo real do schema de operações
+        const freteTonVal = parseFloat(String(op.freteTon ?? 0));
+        if (freteTonVal > 0 && pesoRef > 0) {
+          valorEstFrete = freteTonVal * pesoRef;
+        }
+      } catch {}
+
       return {
         ...op,
         corretor,
@@ -266,6 +305,11 @@ export const appRouter = router({
         pesoTotalOrigTon,
         valorEstComissao,
         valorEstClassificador,
+        valorEstFethab,
+        valorEstIagro,
+        valorEstSenar,
+        valorEstFunrural,
+        valorEstFrete,
       };
     }),
   }),
