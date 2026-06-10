@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/server.js",
+      "src": "api/server.mjs",
       "use": "@vercel/node"
     },
     {
@@ -16,15 +16,15 @@
   "rewrites": [
     {
       "source": "/api/oauth/:path*",
-      "destination": "/api/server.js"
+      "destination": "/api/server.mjs"
     },
     {
       "source": "/api/trpc/:path*",
-      "destination": "/api/server.js"
+      "destination": "/api/server.mjs"
     },
     {
       "source": "/manus-storage/:path*",
-      "destination": "/api/server.js"
+      "destination": "/api/server.mjs"
     },
     {
       "source": "/(.*)",
