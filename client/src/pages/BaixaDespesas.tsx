@@ -298,133 +298,177 @@ export default function BaixaDespesas() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Dados do comprovante */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg">
-              <div>
-                <p className="text-xs text-muted-foreground">Favorecido reconhecido</p>
-                <p className="font-semibold text-sm">{leitura.favorecido}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Valor no comprovante</p>
-                <p className="font-semibold text-sm">{fmtMoeda(leitura.valor)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Data</p>
-                <p className="font-semibold text-sm">
-                  {leitura.data ? new Date(leitura.data + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Forma</p>
-                <p className="font-semibold text-sm uppercase">{leitura.formaPagamento}</p>
-              </div>
-            </div>
+            {/* Layout de duas colunas: preview à esquerda, dados à direita */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {leitura.textoCompleto && (
-              <details className="text-xs text-muted-foreground">
-                <summary className="cursor-pointer hover:text-foreground">Ver texto completo extraído</summary>
-                <p className="mt-2 p-3 bg-muted/20 rounded text-xs leading-relaxed">{leitura.textoCompleto}</p>
-              </details>
-            )}
-
-            <Separator />
-
-            {/* Saldos sugeridos para baixa */}
-            <div>
-              <p className="text-sm font-medium mb-3 flex items-center gap-2">
-                <Link2 className="h-4 w-4" />
-                Saldos em aberto — selecione os que este comprovante quita
-              </p>
-
-              {sugestoes.length === 0 ? (
-                <div className="flex items-center gap-2 p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                  <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
-                  <p className="text-sm text-orange-300">
-                    Nenhum saldo em aberto encontrado. Cadastre as despesas em "Despesas Operacionais" primeiro.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {sugestoes.map((s: any) => {
-                    const sel = selecionados.has(s.chave);
-                    return (
-                      <div
-                        key={s.chave}
-                        onClick={() => toggleSelecionado(s.chave)}
-                        className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${
-                          sel
-                            ? "border-emerald-500/50 bg-emerald-500/10"
-                            : "border-border hover:border-border/80 bg-muted/10"
-                        }`}
+              {/* Coluna esquerda: pré-visualização do comprovante */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comprovante</p>
+                <div className="border rounded-lg overflow-hidden bg-muted/20 min-h-[200px] flex items-center justify-center">
+                  {filePreview ? (
+                    <img
+                      src={filePreview}
+                      alt="Comprovante"
+                      className="w-full h-auto max-h-[420px] object-contain rounded"
+                    />
+                  ) : comprovanteUrl ? (
+                    <div className="flex flex-col items-center gap-3 p-6 text-center">
+                      <FileText className="h-14 w-14 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Comprovante PDF salvo</p>
+                      <a
+                        href={comprovanteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary underline hover:no-underline"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                            sel ? "border-emerald-500 bg-emerald-500" : "border-muted-foreground"
-                          }`}>
-                            {sel && <CheckCircle className="h-3 w-3 text-white" />}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{s.favorecido}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {CAT_LABELS[s.categoria] ?? s.categoria}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-red-400">{fmtMoeda(s.saldoAberto)}</p>
-                            <p className="text-xs text-muted-foreground">saldo em aberto</p>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            {s.autoVincular && (
-                              <Badge variant="default" className="text-xs bg-emerald-600">Auto</Badge>
-                            )}
-                            <span className={`text-xs font-semibold ${scoreColor(s.matchScore)}`}>
-                              {s.matchScore}% match
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        Abrir PDF
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 p-6 text-muted-foreground">
+                      <FileText className="h-12 w-12" />
+                      <p className="text-xs">Arquivo carregado</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {sugestoes.length > 0 && (
-              <>
-                {selecionados.size > 0 && (
-                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-emerald-400" />
-                      <p className="text-sm font-medium">
-                        Total a quitar:{" "}
-                        <span className="text-emerald-400 font-bold">
-                          {fmtMoeda(
-                            sugestoes
-                              .filter((s: any) => selecionados.has(s.chave))
-                              .reduce((acc: number, s: any) => acc + s.saldoAberto, 0)
-                          )}
-                        </span>
+                {/* Texto extraído colapsável abaixo do preview */}
+                {leitura.textoCompleto && (
+                  <details className="text-xs text-muted-foreground">
+                    <summary className="cursor-pointer hover:text-foreground select-none">Ver texto completo extraído</summary>
+                    <p className="mt-2 p-3 bg-muted/20 rounded text-xs leading-relaxed whitespace-pre-wrap">{leitura.textoCompleto}</p>
+                  </details>
+                )}
+              </div>
+
+              {/* Coluna direita: dados extraídos e vinculação */}
+              <div className="space-y-4">
+                {/* Dados do comprovante */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Dados Extraídos pela IA</p>
+                  <div className="grid grid-cols-2 gap-3 p-4 bg-muted/30 rounded-lg">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Favorecido</p>
+                      <p className="font-semibold text-sm">{leitura.favorecido}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Valor</p>
+                      <p className="font-semibold text-sm text-emerald-400">{fmtMoeda(leitura.valor)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Data</p>
+                      <p className="font-semibold text-sm">
+                        {leitura.data ? new Date(leitura.data + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
                       </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">{selecionados.size} grupo(s) selecionado(s)</p>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Forma</p>
+                      <p className="font-semibold text-sm uppercase">{leitura.formaPagamento}</p>
+                    </div>
                   </div>
+                </div>
+
+                <Separator />
+
+                {/* Saldos sugeridos para baixa */}
+                <div>
+                  <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Link2 className="h-4 w-4" />
+                    Saldos em aberto — selecione os que este comprovante quita
+                  </p>
+
+                  {sugestoes.length === 0 ? (
+                    <div className="flex items-center gap-2 p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                      <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
+                      <p className="text-sm text-orange-300">
+                        Nenhum saldo em aberto encontrado. Cadastre as despesas em "Despesas Operacionais" primeiro.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {sugestoes.map((s: any) => {
+                        const sel = selecionados.has(s.chave);
+                        return (
+                          <div
+                            key={s.chave}
+                            onClick={() => toggleSelecionado(s.chave)}
+                            className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${
+                              sel
+                                ? "border-emerald-500/50 bg-emerald-500/10"
+                                : "border-border hover:border-border/80 bg-muted/10"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                                sel ? "border-emerald-500 bg-emerald-500" : "border-muted-foreground"
+                              }`}>
+                                {sel && <CheckCircle className="h-3 w-3 text-white" />}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">{s.favorecido}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {CAT_LABELS[s.categoria] ?? s.categoria}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-red-400">{fmtMoeda(s.saldoAberto)}</p>
+                                <p className="text-xs text-muted-foreground">saldo em aberto</p>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                {s.autoVincular && (
+                                  <Badge variant="default" className="text-xs bg-emerald-600">Auto</Badge>
+                                )}
+                                <span className={`text-xs font-semibold ${scoreColor(s.matchScore)}`}>
+                                  {s.matchScore}% match
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {sugestoes.length > 0 && (
+                  <>
+                    {selecionados.size > 0 && (
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-emerald-400" />
+                          <p className="text-sm font-medium">
+                            Total a quitar:{" "}
+                            <span className="text-emerald-400 font-bold">
+                              {fmtMoeda(
+                                sugestoes
+                                  .filter((s: any) => selecionados.has(s.chave))
+                                  .reduce((acc: number, s: any) => acc + s.saldoAberto, 0)
+                              )}
+                            </span>
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{selecionados.size} grupo(s) selecionado(s)</p>
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={handleConfirmarBaixa}
+                      disabled={selecionados.size === 0 || darBaixaMut.isPending}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      {darBaixaMut.isPending ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirmando baixa...</>
+                      ) : (
+                        <><CheckCircle className="h-4 w-4 mr-2" />Confirmar Baixa — {selecionados.size} Grupo(s)</>
+                      )}
+                    </Button>
+                  </>
                 )}
 
-                <Button
-                  onClick={handleConfirmarBaixa}
-                  disabled={selecionados.size === 0 || darBaixaMut.isPending}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700"
-                >
-                  {darBaixaMut.isPending ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirmando baixa...</>
-                  ) : (
-                    <><CheckCircle className="h-4 w-4 mr-2" />Confirmar Baixa — {selecionados.size} Grupo(s)</>
-                  )}
-                </Button>
-              </>
-            )}
+              </div>{/* fim coluna direita */}
+            </div>{/* fim grid 2 colunas */}
           </CardContent>
         </Card>
       )}
