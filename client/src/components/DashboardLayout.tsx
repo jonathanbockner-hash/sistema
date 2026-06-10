@@ -23,7 +23,7 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, ShoppingCart, TrendingUp,
-  Link2, Users, Truck, Package, CreditCard, FileText, Settings, Wheat, Handshake
+  Link2, Users, Truck, Package, CreditCard, FileText, Settings, Handshake
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -68,10 +68,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-3">
             <div className="flex items-center gap-2.5 mb-2">
-              <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center">
-                <Wheat className="text-white" size={20} />
-              </div>
-              <span className="text-2xl font-black tracking-tight text-gradient">TIME OPS</span>
+              <img
+                src="/manus-storage/logo-time-agri_6188c408.webp"
+                alt="TIME Agri Business"
+                className="h-16 w-auto object-contain"
+              />
             </div>
             <h1 className="text-lg font-semibold tracking-tight text-center text-foreground">
               Gestão de Trading Agrícola
@@ -156,10 +157,11 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
               </button>
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-6 h-6 rounded-md gradient-brand flex items-center justify-center shrink-0">
-                    <Wheat className="text-white" size={12} />
-                  </div>
-                  <span className="font-black tracking-tight text-sm text-gradient truncate">TIME OPS</span>
+                  <img
+                    src="/manus-storage/logo-time-agri_6188c408.webp"
+                    alt="TIME Agri Business"
+                    className="h-7 w-auto object-contain"
+                  />
                 </div>
               )}
             </div>
