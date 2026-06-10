@@ -111,5 +111,5 @@
 
 ## Pendências pós-módulo despesas
 - [x] Campo `tipo` não existe no schema (foi descartado em favor de `categoria` — requisito corrigido)
-- [ ] Gerar migration Drizzle real para `despesas_operacionais` (tabela criada via SQL direto, drizzle/schema.ts já atualizado)
-- [ ] Integrar despesas operacionais no relatório consolidado com seção de custos detalhada
+- [x] Gerar migration Drizzle real para `despesas_operacionais` (tabela criada via SQL direto, drizzle/schema.ts já atualizado)
+- [x] Integrar despesas operacionais no relatório consolidado com seção de custos detalhada

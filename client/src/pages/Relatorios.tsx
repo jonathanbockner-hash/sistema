@@ -31,6 +31,7 @@ export default function Relatorios() {
   const { data: embarques = [] } = trpc.embarques.list.useQuery({});
   const { data: descargas = [] } = trpc.descargas.list.useQuery();
   const { data: pagamentos = [] } = trpc.pagamentos.list.useQuery();
+  const { data: despesas = [] } = trpc.despesas.list.useQuery({});
   const { data: cfg } = trpc.config.get.useQuery();
 
   const cfgN = {
@@ -388,6 +389,53 @@ export default function Relatorios() {
                 </tfoot>
               </table>
             </div>
+
+            {/* Seção de Despesas Operacionais — apenas no consolidado */}
+            {tipo === "consolidado" && (() => {
+              // Filtrar despesas pelas operações nas linhas do relatório
+              const opIdsNasLinhas = Array.from(new Set(linhas.map(l => l.op?.id).filter(Boolean)));
+              const despesasFiltradas = despesas.filter((d: any) => opIdsNasLinhas.includes(d.operacaoId));
+              if (despesasFiltradas.length === 0) return null;
+              const totalDesp = despesasFiltradas.reduce((s: number, d: any) => s + Number(d.valor || 0), 0);
+              const LABELS: Record<string, string> = {
+                comissao: "Comissão", fethab: "FETHAB", iagro: "IAGRO",
+                senar: "SENAR", funrural: "FUNRURAL", classificador: "Classificador",
+                frete: "Frete", outro: "Outro",
+              };
+              return (
+                <div className="border-t-2 border-gray-400 p-3 bg-white">
+                  <p className="font-bold text-center border-b border-gray-300 pb-1 mb-2 text-[10px] uppercase tracking-wide">Despesas Operacionais Lançadas</p>
+                  <table className="w-full text-[9px]">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left font-bold pb-1">Categoria</th>
+                        <th className="text-left font-bold pb-1">Favorecido</th>
+                        <th className="text-left font-bold pb-1">Descrição</th>
+                        <th className="text-right font-bold pb-1">Data Pgto.</th>
+                        <th className="text-right font-bold pb-1">Forma</th>
+                        <th className="text-right font-bold pb-1">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {despesasFiltradas.map((d: any) => (
+                        <tr key={d.id} className="border-b border-gray-100">
+                          <td className="py-0.5 font-semibold">{LABELS[d.categoria] ?? d.categoria}</td>
+                          <td className="py-0.5">{d.favorecido}</td>
+                          <td className="py-0.5 text-gray-600">{d.descricao || "—"}</td>
+                          <td className="py-0.5 text-right">{d.dataPagamento ? fmtDate(d.dataPagamento) : "—"}</td>
+                          <td className="py-0.5 text-right uppercase">{d.formaPagamento || "—"}</td>
+                          <td className="py-0.5 text-right font-mono text-red-700">{brl(Number(d.valor || 0))}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 border-gray-400 font-bold">
+                        <td colSpan={5} className="py-1">Total Despesas Operacionais</td>
+                        <td className="py-1 text-right font-mono text-red-700">{brl(totalDesp)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
 
             {/* Rodapé com 3 colunas: Resumo Financeiro | Resumo Fiscal | Dados Bancários */}
             <div className="border-t-2 border-gray-400 grid grid-cols-3 gap-0 bg-white">
