@@ -147,7 +147,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
     <>
       <div className="relative" ref={sidebarRef}>
         <Sidebar collapsible="icon" className="border-r border-border/50" disableTransition={isResizing}>
-          <SidebarHeader className="h-14 justify-center border-b border-border/50">
+          <SidebarHeader className="h-16 justify-center border-b border-border/50">
             <div className="flex items-center gap-2.5 px-2 w-full">
               <button
                 onClick={toggleSidebar}
@@ -160,7 +160,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                   <img
                     src="/manus-storage/logo-time-agri_6188c408.webp"
                     alt="TIME Agri Business"
-                    className="h-7 w-auto object-contain"
+                    className="h-11 w-auto object-contain drop-shadow-sm"
                   />
                 </div>
               )}

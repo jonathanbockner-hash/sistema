@@ -217,19 +217,22 @@ export default function Relatorios() {
 
         {/* Cabeçalho */}
         <div className="border-b-2 border-gray-400 p-3 flex items-center justify-between bg-white">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-green-700 flex items-center justify-center">
-              <span className="text-white font-black text-xs">TIME<br/>OPS</span>
-            </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <img
+              src="/manus-storage/logo-time-agri_6188c408.webp"
+              alt="TIME Agri Business"
+              style={{ height: 52, width: "auto", objectFit: "contain" }}
+            />
           </div>
-          <div className="text-center flex-1">
+          <div className="text-center flex-1 px-4">
             <p className="text-sm font-bold uppercase tracking-wide text-gray-800">
               Relatório Fechamento Financeiro Fiscal —{" "}
               {tipo === "compra" ? "Compra" : tipo === "venda" ? "Venda" : "Consolidado"}
             </p>
+            <p className="text-[9px] text-gray-500 mt-0.5">{nomeEmpresa}</p>
           </div>
-          <div className="text-right text-[9px] text-gray-500">
-            <p>{nomeEmpresa}</p>
+          <div className="text-right text-[9px] text-gray-500 shrink-0">
+            <p>Emissão: {emissaoStr}</p>
           </div>
         </div>
 
