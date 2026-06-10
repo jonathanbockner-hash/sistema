@@ -206,7 +206,67 @@ export const appRouter = router({
       if (!op) return null;
       const corretor = op.corretorId ? await getCorretor(op.corretorId) : null;
       const classificador = op.classificadorId ? await getClassificador(op.classificadorId) : null;
-      return { ...op, corretor, classificador };
+
+      // Calcular peso total descarregado da operação (soma de pesoDescarga de todas as descargas)
+      const db = await (await import("./db")).getDb?.() ?? null;
+      let pesoTotalDescargaKg = 0;
+      let pesoTotalOrigKg = 0;
+      try {
+        const { db: dbConn } = await import("./db").then(m => ({ db: null }));
+        // Usar SQL direto para somar pesos
+        const { getDb } = await import("./db");
+        const dbI = await getDb();
+        if (dbI) {
+          const embs = await dbI.select().from(
+            (await import("../drizzle/schema")).embarques
+          ).where(
+            (await import("drizzle-orm")).eq(
+              (await import("../drizzle/schema")).embarques.operacaoId,
+              input.id
+            )
+          );
+          pesoTotalOrigKg = embs.reduce((s, e) => s + parseFloat(String(e.pesoOrigem ?? 0)), 0);
+          const { descargas: descTab } = await import("../drizzle/schema");
+          const { inArray } = await import("drizzle-orm");
+          const embIds = embs.map(e => e.id);
+          if (embIds.length > 0) {
+            const descs = await dbI.select().from(descTab).where(inArray(descTab.embarqueId, embIds));
+            pesoTotalDescargaKg = descs.reduce((s, d) => s + parseFloat(String(d.pesoDescarga ?? 0)), 0);
+          }
+        }
+      } catch {}
+
+      const pesoTotalDescargaTon = pesoTotalDescargaKg / 1000;
+      const pesoTotalOrigTon = pesoTotalOrigKg / 1000;
+      const pesoRef = pesoTotalDescargaTon > 0 ? pesoTotalDescargaTon : pesoTotalOrigTon;
+
+      // Calcular valor estimado de comissão
+      const comissaoValorNum = parseFloat(String(op.comissaoValor ?? 0));
+      let valorEstComissao = 0;
+      if (op.comissaoTipo === "fixo") {
+        valorEstComissao = comissaoValorNum;
+      } else if (op.comissaoTipo === "ton" && pesoRef > 0) {
+        valorEstComissao = comissaoValorNum * pesoRef;
+      } else if (op.comissaoTipo === "sc" && pesoRef > 0) {
+        valorEstComissao = comissaoValorNum * (pesoRef * 1000 / 60); // kg -> sacas de 60kg
+      }
+      // percVenda: não calculamos aqui (depende do valor de venda)
+
+      // Calcular valor estimado de classificador
+      const custoClassTonNum = parseFloat(String(op.custoClassTon ?? 0));
+      const valorEstClassificador = pesoRef > 0 ? custoClassTonNum * pesoRef : 0;
+
+      return {
+        ...op,
+        corretor,
+        classificador,
+        pesoTotalDescargaKg,
+        pesoTotalDescargaTon,
+        pesoTotalOrigKg,
+        pesoTotalOrigTon,
+        valorEstComissao,
+        valorEstClassificador,
+      };
     }),
   }),
 

@@ -107,44 +107,46 @@ export default function DespesasOperacionais() {
   useEffect(() => {
     if (!opDetalhes || !sheetOpen || form.id) return; // só para novos lançamentos
     const cat = form.categoria;
-    if (cat === "comissao" && opDetalhes.corretor) {
-      const corretor = opDetalhes.corretor;
-      const op = opDetalhes;
-      // Calcular valor estimado de comissão para todos os tipos
-      let valorEst = 0;
-      const comissaoValor = parseFloat(String(op.comissaoValor ?? 0));
-      if (op.comissaoTipo === "fixo") {
-        valorEst = comissaoValor;
-      } else if (op.comissaoTipo === "sc") {
-        // comissaoValor = R$/sc; estima pelo total de SC do contrato de compra
-        // Sem acesso ao peso total aqui, deixar campo vazio para preenchimento manual
-        valorEst = 0;
-      } else if (op.comissaoTipo === "ton") {
-        // comissaoValor = R$/ton; sem peso total disponível aqui
-        valorEst = 0;
-      } else if (op.comissaoTipo === "percVenda") {
-        // comissaoValor = % sobre valor de venda; sem valor de venda aqui
-        valorEst = 0;
-      }
+    const op = opDetalhes as any;
+
+    if (cat === "comissao" && op.corretor) {
+      const corretor = op.corretor;
+      // valorEstComissao já calculado no backend com o peso real descarregado
+      const valorEst: number = op.valorEstComissao ?? 0;
+      const tipoLabel = op.comissaoTipo === "fixo" ? "valor fixo"
+        : op.comissaoTipo === "sc" ? "por saca"
+        : op.comissaoTipo === "ton" ? "por tonelada"
+        : "% sobre venda";
+      const pesoInfo = (op.pesoTotalDescargaTon ?? 0) > 0
+        ? ` — ${Number(op.pesoTotalDescargaTon).toFixed(3)} ton descarregadas`
+        : (op.pesoTotalOrigTon ?? 0) > 0
+        ? ` — ${Number(op.pesoTotalOrigTon).toFixed(3)} ton estimadas`
+        : "";
       setForm(f => ({
         ...f,
         favorecido: f.favorecido || corretor.nome,
         valor: f.valor || (valorEst > 0 ? String(valorEst.toFixed(2)) : ""),
-        formaPagamento: (corretor as any).pix ? "pix" : f.formaPagamento,
-        descricao: f.descricao || `Comissão ${op.comissaoTipo === "fixo" ? "valor fixo" : op.comissaoTipo === "sc" ? "por saca" : op.comissaoTipo === "ton" ? "por tonelada" : "% sobre venda"} — ${op.sigla}`,
+        formaPagamento: corretor.pix ? "pix" : f.formaPagamento,
+        descricao: f.descricao || `Comissão ${tipoLabel} — ${op.sigla}${pesoInfo}`,
       }));
       setAutoPreenchido(true);
-    } else if (cat === "classificador" && opDetalhes.classificador) {
-      const cl = opDetalhes.classificador;
-      const op = opDetalhes;
-      // custoClassTon = R$/ton; sem peso total aqui, deixar para preenchimento manual
+
+    } else if (cat === "classificador" && op.classificador) {
+      const cl = op.classificador;
+      // valorEstClassificador já calculado no backend com o peso real descarregado
+      const valorEst: number = op.valorEstClassificador ?? 0;
+      const pesoInfo = (op.pesoTotalDescargaTon ?? 0) > 0
+        ? ` (${Number(op.pesoTotalDescargaTon).toFixed(3)} ton × R$ ${parseFloat(String(op.custoClassTon ?? 0)).toFixed(3)}/ton)`
+        : "";
       setForm(f => ({
         ...f,
         favorecido: f.favorecido || cl.nome,
-        formaPagamento: (cl as any).pix ? "pix" : f.formaPagamento,
-        descricao: f.descricao || `Classificação — ${op.sigla} (R$ ${parseFloat(String(op.custoClassTon ?? 0)).toFixed(3)}/ton)`,
+        valor: f.valor || (valorEst > 0 ? String(valorEst.toFixed(2)) : ""),
+        formaPagamento: cl.pix ? "pix" : f.formaPagamento,
+        descricao: f.descricao || `Classificação — ${op.sigla}${pesoInfo}`,
       }));
       setAutoPreenchido(true);
+
     } else {
       setAutoPreenchido(false);
     }
